@@ -14,8 +14,7 @@ const base = {data:[{
 }]};
 let r = fn({payload:JSON.stringify(base)},{log:()=>{}});
 chk('sends when owner email present', r.send==='yes');
-chk('clock set to Brisbane today', r.clock_date==='2026-09-15', r.clock_date);
-chk('does NOT overwrite existing proposal date', r.set_proposal_date==='');
+chk('writes nothing back to CRM', !('clock_date' in r) && !('set_proposal_date' in r));
 chk('keeps consultant proposal date in body', r.body.includes('Tuesday 8 September 2026'));
 chk('subject names the organisation', r.subject==='Proposal follow-up started - Woodford Golf Club', r.subject);
 chk('no placeholder leakage', !/undefined|null|\[Contact\]|\{\{/.test(r.subject+r.body));
@@ -23,8 +22,8 @@ chk('no placeholder leakage', !/undefined|null|\[Contact\]|\{\{/.test(r.subject+
 // Blank proposal date -> stamp it
 let blank = JSON.parse(JSON.stringify(base)); blank.data[0].Date_Proposal_Sent=null;
 r = fn({payload:JSON.stringify(blank)},{log:()=>{}});
-chk('stamps blank proposal date with today', r.set_proposal_date==='2026-09-15', r.set_proposal_date);
-chk('tells consultant the date was filled in', r.body.includes('was blank'));
+chk('flags a blank proposal date without writing it', r.proposal_date_blank==='yes');
+chk('explains the blank date does not affect reminders', r.body.includes('does not affect the reminders'));
 
 // Missing contact -> prompt to fix, no "undefined"
 let noContact = JSON.parse(JSON.stringify(base)); noContact.data[0].Contact_Name=null;
@@ -35,22 +34,12 @@ chk('missing contact prints no undefined', !/undefined/.test(r.body));
 // Wrong stage (race) -> do not start
 let moved = JSON.parse(JSON.stringify(base)); moved.data[0].Stage='Won';
 r = fn({payload:JSON.stringify(moved)},{log:()=>{}});
-chk('does not start journey if deal already Won', r.send==='no' && r.clock_date==='', r.reason);
+chk('does not start journey if deal already Won', r.send==='no', r.reason);
 
 // No owner email
 let noOwner = JSON.parse(JSON.stringify(base)); noOwner.data[0].Owner={name:'Nobody'};
 r = fn({payload:JSON.stringify(noOwner)},{log:()=>{}});
 chk('flags missing owner email instead of sending blank', r.send==='no' && /no owner email/i.test(r.reason));
-
-// Duplicate webhook: clock already set to today.
-let dup = JSON.parse(JSON.stringify(base)); dup.data[0].Followup_Clock_Started='2026-09-15';
-r = fn({payload:JSON.stringify(dup)},{log:()=>{}});
-chk('duplicate webhook does not resend Day 1', r.send==='no' && /duplicate/i.test(r.reason), r.reason);
-
-// A clock from a previous journey must NOT block a genuine restart.
-let restart = JSON.parse(JSON.stringify(base)); restart.data[0].Followup_Clock_Started='2026-08-01';
-r = fn({payload:JSON.stringify(restart)},{log:()=>{}});
-chk('revised proposal restarts the clock', r.send==='yes' && r.clock_date==='2026-09-15', r.clock_date);
 
 // Bad payloads
 try{ fn({payload:'not json'},{log:()=>{}}); chk('bad JSON throws',false);}catch(e){ chk('bad JSON throws a clear error', /not valid JSON/.test(e.message), e.message); }

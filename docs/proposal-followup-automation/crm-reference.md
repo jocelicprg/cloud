@@ -50,8 +50,7 @@ Stages currently in use: `Cold`, `Warm`, `Short-listed`, `Formal Quote Sent`,
 | `Amount` | currency | Used in the Day 4 escalation |
 | `Date_Proposal_Sent` | date | The consultant's own record of when the proposal went out |
 | `Last_Activity_Time` | datetime | The same-day activity test |
-| `Stage_Modified_Time` | datetime | When the stage last changed — see the trap below |
-| `Followup_Clock_Started` | date | **Does not exist yet.** Created as part of this build |
+| `Stage_Modified_Time` | datetime | **The journey clock.** When the stage last changed. Zoho maintains it, so no custom field is needed and nothing is written back — but see trap 1, which makes it easy to break |
 
 ## Three API traps found while building this
 
@@ -68,13 +67,13 @@ error, so the bug is invisible.
 **3. `Modified_Time` is not searchable.**
 `(Modified_Time:greater_equal:...)` fails with
 `the field is not available for search`. Ordinary date fields such as
-`Date_Proposal_Sent` and the new `Followup_Clock_Started` **are** searchable, and
+Ordinary date fields such as `Date_Proposal_Sent` **are** searchable, and
 `sort_by` on the search endpoint accepts only `id`, `Created_Time` and
 `Modified_Time`.
 
-Taken together, these are why the journey clock is a plain custom date field
-rather than `Stage_Modified_Time`: a date field can be filtered server-side, so
-the scheduled Zaps return a handful of rows instead of all 62.
+Taken together, these are why the scheduled Zaps fetch every deal at Formal
+Quote Sent and filter in code rather than narrowing the query: the clock they
+filter on cannot be expressed in a search criterion or a COQL select.
 
 ## Data quality as it stands today
 
@@ -86,10 +85,11 @@ Of the **62 deals** currently at `Formal Quote Sent`:
   figure raised in the meeting
 - only **7** have a proposal date on or after 1 September 2026
 
-This is exactly why the automation must set its own clock field rather than
-trusting `Date_Proposal_Sent`: if it keyed off that field, roughly one proposal
-in seven would silently never enter the journey — the precise failure the
-project exists to fix.
+This is exactly why the journey clock is `Stage_Modified_Time` rather than
+`Date_Proposal_Sent`: if it keyed off that field, roughly one proposal in seven
+would silently never enter the journey — the precise failure the project exists
+to fix. `Date_Proposal_Sent` is still shown in the messages, falling back to the
+clock when blank.
 
 One deal (`2026 Online Meeting`, Sarina Golf Club) has **no linked contact**, so
 the message copy has to degrade gracefully rather than print `undefined`.
@@ -107,7 +107,9 @@ Measured over 1 July to 8 September 2026 (50 business days, 69 proposals):
 
 So at steady state a consultant should expect **one or two reminder emails on a
 typical day**, not the flood the team was worried about. The 62 open deals do
-**not** generate reminders, because their clock field is blank.
+**not** generate reminders — but note that this is enforced by the `GO_LIVE_DATE`
+guard in the Code steps, not by anything in the data, since Zoho populates
+`Stage_Modified_Time` on every record.
 
 ## People
 

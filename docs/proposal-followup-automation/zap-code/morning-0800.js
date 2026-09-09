@@ -39,10 +39,13 @@ var ESCALATION_CC = 'nathan.butcher@cprgroup.com.au';
 // Used to build a clickable deal link. zgid verified via the Organization API.
 var CRM_DEAL_URL = 'https://crm.zoho.com.au/crm/org691602767/tab/Potentials/';
 
-// Nothing before this Brisbane date can start a journey. This is what keeps the
-// 62 historical deals already sitting at "Formal Quote Sent" out of the
-// automation. Leave it set to the go-live date.
-var GO_LIVE_DATE = '2026-09-10';
+// Nothing before this Brisbane date can start a journey.
+//
+// THIS IS LOAD-BEARING. Because the clock is Zoho's own Stage_Modified_Time,
+// every one of the 62 deals already sitting at "Formal Quote Sent" has a
+// populated clock. This date is the only thing keeping that backlog out of the
+// automation. Set it to the go-live date and do not clear it.
+var GO_LIVE_DATE = '2026-09-10';  // load-bearing, see above
 
 // ---------------------------------------------------------------------------
 // DATE HELPERS - all dates are Brisbane wall-clock dates
@@ -259,12 +262,15 @@ var skipped = [];
 for (var i = 0; i < deals.length; i++) {
   var deal = deals[i];
 
-  // The journey clock. Written by the Day 1 Zap when the deal enters the stage.
-  var clockStart = toBrisbaneParts(deal.Followup_Clock_Started);
+  // The journey clock: when the deal last entered a stage. Zoho maintains this
+  // itself, so nothing has to be written back to CRM and no custom field is
+  // needed. It resets whenever the stage changes, which is exactly the
+  // "revised proposal restarts the journey" rule.
+  var clockStart = toBrisbaneParts(deal.Stage_Modified_Time);
 
   if (!clockStart) {
     // Every deal that pre-dates go-live falls in here and is ignored.
-    skipped.push({ id: deal.id, reason: 'no follow-up clock set' });
+    skipped.push({ id: deal.id, reason: 'no stage-modified time returned' });
     continue;
   }
   if (compareParts(clockStart, goLive) < 0) {

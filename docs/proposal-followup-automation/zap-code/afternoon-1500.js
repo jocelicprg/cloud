@@ -31,7 +31,7 @@
 
 var BRISBANE_OFFSET_MINUTES = 600;
 var CRM_DEAL_URL = 'https://crm.zoho.com.au/crm/org691602767/tab/Potentials/';
-var GO_LIVE_DATE = '2026-09-10';
+var GO_LIVE_DATE = '2026-09-10';  // load-bearing, see above
 
 // ---------------------------------------------------------------------------
 // DATE HELPERS - keep in step with morning-0800.js
@@ -114,7 +114,7 @@ var suppressed = 0;
 for (var i = 0; i < deals.length; i++) {
   var deal = deals[i];
 
-  var clockStart = toBrisbaneParts(deal.Followup_Clock_Started);
+  var clockStart = toBrisbaneParts(deal.Stage_Modified_Time);
   if (!clockStart) continue;
   if (compareParts(clockStart, goLive) < 0) continue;
   if (compareParts(clockStart, today) > 0) continue;

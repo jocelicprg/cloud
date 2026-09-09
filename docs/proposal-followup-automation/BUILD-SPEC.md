@@ -40,30 +40,49 @@ today. This gives three properties for free, with no state to maintain:
 | Rule from the journey | How it is honoured |
 |---|---|
 | Won, Closed Lost, Future Opportunity → stop immediately | The deal simply stops matching the query. No cancellation logic exists, so none can fail. |
-| Revised proposal → restart from Day 1 | Re-entering the stage rewrites the clock field, so the day count restarts. |
+| Revised proposal → restart from Day 1 | Re-entering the stage resets Zoho's `Stage_Modified_Time`, so the day count restarts by itself. |
 | Suppress the reminder if activity was recorded today | Each run re-reads `Last_Activity_Time`. Nothing needs remembering between the 08:00 and 15:00 runs. |
+| Nothing is written to CRM | The clock is a field Zoho already maintains, so the automation is read-only. |
 
 That last row is worth calling out, because it was flagged in planning as *"the
 trickiest part"* — two workflows that do not talk to each other. With scheduled
 queries they do not need to: the afternoon run just looks at the CRM again.
 
-### Why a new clock field rather than an existing date
+### Where the journey clock comes from
 
-The journey needs to know when a deal entered the stage.
+The journey needs to know when a deal entered the stage. It uses Zoho's own
+**`Stage_Modified_Time`**, which Zoho maintains automatically.
 
-- `Date_Proposal_Sent` is consultant-entered and **blank on 9 of the 62** deals
-  currently at this stage. Keyed off it, roughly one proposal in seven would
-  silently never enter the journey.
-- `Stage_Modified_Time` is accurate and always populated, but it cannot be
-  filtered server-side (not searchable, not selectable in COQL), so the Zap
-  would have to pull all 62 deals every run and filter in code.
+That means **no custom field, and nothing is ever written back to CRM.** The
+automation is read-only against Zoho, which removes three hazards in one go: a
+write-back cannot re-trigger the workflow rule, a consultant-entered
+`Date_Proposal_Sent` can never be overwritten, and there is no field for anyone
+to accidentally clear.
 
-So the build adds one field, `Followup_Clock_Started`, written on entry to the
-stage. It is filterable, always populated going forward, and — because it is
-blank on every one of the 62 historical deals — **the existing backlog can never
-trigger a reminder.** No date cutoff to remember, no risk of a go-live flood.
+It also gives the "revised proposal restarts the journey" rule for free.
+`Stage_Modified_Time` resets whenever the stage changes, so moving a deal out of
+Formal Quote Sent and back in restarts the count from that day, with no extra
+logic.
 
----
+Two consequences to understand:
+
+**The go-live date is load-bearing.** Because Zoho populates
+`Stage_Modified_Time` on every record, all 62 deals currently sitting at Formal
+Quote Sent have a clock. `GO_LIVE_DATE` at the top of both Code steps is the
+only thing keeping that backlog out of the automation. Set it to the day you
+switch on, and do not clear it. A test covers exactly this.
+
+**The clock cannot be filtered server-side.** `Stage_Modified_Time` is not
+searchable and not selectable in COQL, so the search cannot narrow by date. It
+returns every deal at Formal Quote Sent — 62 today — and the Code step does the
+filtering. That is well inside Zapier's limits, but it is the one thing to watch
+as the backlog grows: see the note under section 4.
+
+`Date_Proposal_Sent` was the obvious alternative and is not used as the clock,
+because it is **blank on 9 of those 62 deals**. Keying the journey off it would
+silently skip roughly one proposal in seven, which is the exact failure this
+project exists to fix. It is still used for display in the messages, falling
+back to the clock when blank.
 
 ## 2. Prerequisites
 
@@ -91,16 +110,11 @@ Work through these before building. Items 1 and 2 are blocking.
       has the action we need (`Message to User`, addressed by email address),
       but it is **not currently connected**. Only the 15:00 nudges depend on it,
       so Zaps 1 and 2 can go live without it.
-- [ ] **3. Create the clock field** on the Deals module:
-      | Property | Value |
-      |---|---|
-      | Field label | `Follow-up Clock Started` |
-      | API name | `Followup_Clock_Started` |
-      | Type | Date |
-      | Layout | Standard |
-      Leave it off the layout if you prefer it hidden from consultants — the API
-      writes to it either way. Do **not** backfill it. Its blankness on the 62
-      historical deals is what protects them.
+- [ ] **3. Set `GO_LIVE_DATE`** at the top of both scheduled Code steps to the
+      Brisbane date you switch on, in `YYYY-MM-DD` form. Nothing that entered
+      the stage before that date can produce a reminder, which is what keeps the
+      62 existing deals quiet. **No CRM fields need creating or changing** —
+      the automation only reads from Zoho.
 - [ ] **4. Set a default Gmail connection and decide the sending mailbox.**
       There are **five** Gmail connections on the account and **no default is
       set**, so a Gmail step will not know which mailbox to send from until one
@@ -165,65 +179,47 @@ cannot go stale between the rule firing and the Zap running.
 | # | App / action | Configuration |
 |---|---|---|
 | 1 | **Webhooks by Zapier** → Catch Hook | Copy the URL into the Zoho webhook above |
-| 2 | **Zoho CRM** → Make API GET Request | URL `https://www.zohoapis.com.au/crm/v7/Deals/{{deal_id}}` — no querystring, so `Stage_Modified_Time` comes back populated. This is Zapier's *API Request* action, which is labelled beta; the packaged *Find Module Entry* action cannot be used because it supports only one search field |
-| 3 | **Filter by Zapier** | Continue only if `Stage` **exactly matches** `Formal Quote Sent` |
+| 2 | **Zoho CRM** → Make API GET Request | URL `https://www.zohoapis.com.au/crm/v7/Deals/{{deal_id}}`, no querystring. This is Zapier's *API Request* action, labelled beta; the packaged *Find Module Entry* action cannot express what is needed here |
+| 3 | **Filter by Zapier** | Continue only if `Stage` **exactly matches** `Formal Quote Sent`, and `send` from step 4 is not yet known — so put the stage check here and the send check in step 5 |
 | 4 | **Code by Zapier** → Run JavaScript | Paste [`zap-code/day1-start-journey.js`](zap-code/day1-start-journey.js). Input Data: `payload` = the raw response body from step 2 |
-| 5 | **Zoho CRM** → Make API Mutating Request | `PATCH` to `https://www.zohoapis.com.au/crm/v7/Deals` with the body below |
-| 6 | **Filter by Zapier** | Continue only if `send` from step 4 **exactly matches** `yes` |
-| 7 | **Gmail** → Send Email | To `to`, Subject `subject`, Body `body` — all from step 4 |
+| 5 | **Filter by Zapier** | Continue only if `send` from step 4 **exactly matches** `yes` |
+| 6 | **Gmail** → Send Email | To `to`, Subject `subject`, Body `body`, all from step 4. Body type `Plain` |
 
-Step 5 body — writes the clock, and fills the proposal date only when blank:
-
-```json
-{"data":[{"id":"{{deal_id}}","Followup_Clock_Started":"{{clock_date}}"}],"trigger":[]}
-```
-
-The `"trigger":[]` is important. By default a Zoho API update runs the module's
-workflow rules, so writing back to the deal could set the journey-start rule off
-again. An empty trigger array tells Zoho to skip workflows, approvals and
-blueprints for this write.
-
-If you also want the blank-proposal-date fix (recommended — it feeds the weekly
-reporting), use a second mutating request guarded by a filter on
-`set_proposal_date` not being empty:
-
-```json
-{"data":[{"id":"{{deal_id}}","Date_Proposal_Sent":"{{set_proposal_date}}"}],"trigger":[]}
-```
-
-Keeping it as a separate, filtered step matters: sending `Date_Proposal_Sent` as
-an empty string in the same call would **wipe** a date the consultant entered.
-
-**Duplicate webhooks are handled.** Zoho is known to deliver some webhooks
-twice. The Code step checks whether the clock field already reads today and, if
-it does, returns `send: no` with a reason of "duplicate webhook", so nobody gets
-two Day 1 emails. A clock from an *earlier* journey does not block a genuine
-restart — that case is covered by a test.
-
----
+**Nothing is written back to Zoho.** Earlier drafts of this build stamped a
+clock field here; that is gone. The Zap reads the deal, decides whether to send,
+and sends. If Zoho delivers the webhook twice — which it is known to do
+occasionally — the consequence is one duplicate Day 1 email, not corrupted data.
+That was judged an acceptable trade for removing every write from the design.
 
 ## 4. Zap 2 — 08:00 morning reminders (Day 2, 3 and 4)
 
 | # | App / action | Configuration |
 |---|---|---|
 | 1 | **Schedule by Zapier** → Every Day | Time `8:00 AM`. **Trigger on weekends: No** |
-| 2 | **Code by Zapier** → Run JavaScript | Paste [`zap-code/window-start.js`](zap-code/window-start.js). No inputs |
-| 3 | **Zoho CRM** → Make API GET Request | URL `https://www.zohoapis.com.au/crm/v7/Deals/search`, querystring as below |
-| 4 | **Code by Zapier** → Run JavaScript | Paste [`zap-code/morning-0800.js`](zap-code/morning-0800.js). Input Data: `payload` = raw response body from step 3 |
-| 5 | **Filter by Zapier** | Continue only if `due_count` from step 4 is **greater than** `0` |
-| 6 | **Looping by Zapier** → Create Loop From Line Items | Map the arrays from step 4: `to`, `cc`, `subject`, `body`, `deal_name`, `day_number` |
-| 7 | **Gmail** → Send Email | Inside the loop. **To** = `to`, **Cc** = `cc`, **Subject** = `subject`, **Body** = `body`, all taken from the **loop** step rather than step 4. Leave **Body type** as `Plain` |
+| 2 | **Zoho CRM** → Make API GET Request | URL `https://www.zohoapis.com.au/crm/v7/Deals/search`, querystring as below |
+| 3 | **Code by Zapier** → Run JavaScript | Paste [`zap-code/morning-0800.js`](zap-code/morning-0800.js). Input Data: `payload` = raw response body from step 2 |
+| 4 | **Filter by Zapier** | Continue only if `due_count` from step 3 is **greater than** `0` |
+| 5 | **Looping by Zapier** → Create Loop From Line Items | Map the arrays from step 3: `to`, `cc`, `subject`, `body`, `deal_name`, `day_number` |
+| 6 | **Gmail** → Send Email | Inside the loop. **To** = `to`, **Cc** = `cc`, **Subject** = `subject`, **Body** = `body`, all taken from the **loop** step rather than step 3. Leave **Body type** as `Plain` |
 
-Step 3 querystring — three separate key/value rows, not one string:
+Step 2 querystring — two separate key/value rows, not one string:
 
 | Key | Value |
 |---|---|
-| `criteria` | `((Stage:equals:Formal Quote Sent)and(Followup_Clock_Started:greater_equal:{{window_start}}))` |
-| `fields` | `id,Deal_Name,Stage,Owner,Account_Name,Contact_Name,Amount,Date_Proposal_Sent,Last_Activity_Time,Followup_Clock_Started` |
+| `criteria` | `(Stage:equals:Formal Quote Sent)` |
 | `per_page` | `200` |
 
-Zapier URL-encodes querystring values, so type the criteria literally — spaces
-in `Formal Quote Sent` included. Do not pre-encode it.
+Two things about this that are easy to get wrong:
+
+**Do not add a `fields` parameter.** It looks like an obvious optimisation and it
+silently breaks the whole thing: naming `Stage_Modified_Time` in `fields` makes
+the API return it as `null` rather than erroring, so every deal would look like
+it had no clock and no reminder would ever send. Omitting `fields` returns full
+records, which is what the Code step needs.
+
+**Type the criteria literally**, spaces in `Formal Quote Sent` included. Zapier
+URL-encodes querystring values itself, so pre-encoding produces a query that
+matches nothing.
 
 **Leave Body type as `Plain`.** The Code step builds the message as plain text
 with real line breaks. Setting Body type to `Html` collapses every one of them
@@ -249,11 +245,19 @@ The step also writes a one-line summary to the Zap history
 for every skip. That is the first place to look if somebody says they did not get
 a reminder.
 
-**Headroom.** Zapier caps a Code step at 250 output items and a loop at 500
-iterations, with only one loop allowed per Zap. Against a measured 1.4 proposals
-a business day, and a busiest-ever day of 7, there is no realistic path to those
-limits. The Code step truncates at 200 and logs a warning if it ever gets close,
-so the failure would be loud rather than silent.
+**Headroom.** Two limits matter, and both have room.
+
+Output volume is a non-issue: Zapier caps a Code step at 250 output items and a
+loop at 500 iterations, against a measured 1.4 proposals a business day and a
+busiest-ever day of 7. The Code step truncates at 200 and logs a warning if it
+ever gets close, so that failure would be loud rather than silent.
+
+Input volume is the one to keep an eye on. Because the clock cannot be filtered
+server-side, the search returns every deal at Formal Quote Sent as a full record
+— 62 today, roughly 130 KB. A Code step allows 6 MB in and out, so there is
+plenty of margin, but this figure grows with the backlog rather than with the
+number of reminders. If that stage ever holds many hundreds of deals, page the
+search with `per_page` and `page` and pass the pages through separately.
 
 The Cc column is populated only for the Day 4 escalation, where it carries
 `nathan.butcher@cprgroup.com.au`. It is empty for Day 2 and Day 3, which Gmail
@@ -263,17 +267,16 @@ accepts without complaint.
 
 ## 5. Zap 3 — 15:00 afternoon nudges (Day 2 and 3 only)
 
-Identical to Zap 2 for steps 1–3, then:
+Identical to Zap 2 for steps 1 and 2, then:
 
 | # | App / action | Configuration |
 |---|---|---|
 | 1 | **Schedule by Zapier** → Every Day | Time `3:00 PM`. **Trigger on weekends: No** |
-| 2 | **Code by Zapier** | [`zap-code/window-start.js`](zap-code/window-start.js) |
-| 3 | **Zoho CRM** → Make API GET Request | Same querystring as Zap 2 |
-| 4 | **Code by Zapier** | [`zap-code/afternoon-1500.js`](zap-code/afternoon-1500.js) |
-| 5 | **Filter by Zapier** | Continue only if `due_count` is **greater than** `0` |
-| 6 | **Looping by Zapier** → Create Loop From Line Items | Map `consultant_email`, `message`, `deal_name` |
-| 7 | **Zoho Cliq** → Message to User | Inside the loop. To User `consultant_email`, Text `message` — both from the loop step |
+| 2 | **Zoho CRM** → Make API GET Request | Same URL and querystring as Zap 2 |
+| 3 | **Code by Zapier** | [`zap-code/afternoon-1500.js`](zap-code/afternoon-1500.js). Input Data: `payload` = raw response body from step 2 |
+| 4 | **Filter by Zapier** | Continue only if `due_count` is **greater than** `0` |
+| 5 | **Looping by Zapier** → Create Loop From Line Items | Map `consultant_email`, `message`, `deal_name` |
+| 6 | **Zoho Cliq** → Message to User | Inside the loop. To User `consultant_email`, Text `message` — both from the loop step |
 
 The Cliq action addresses people by email address, which is exactly what the
 Code step emits, so no user-ID lookup is needed.
@@ -334,27 +337,32 @@ triggers temporarily set a few minutes ahead.
 1. **Day 1 fires.** Move a test deal into Formal Quote Sent. Confirm the clock
    field is set to today and the Day 1 email arrives.
 2. **The backlog stays quiet.** Run Zap 2 manually. Confirm the summary line
-   reports the historical deals as skipped for *"no follow-up clock set"* and
-   that no emails go out for them. This is the single most important test — if
-   it fails, do not switch on.
-3. **Day 2 fires.** Set the test deal's clock field back one business day and run
-   Zap 2. Confirm the Day 2 email arrives with the suggested text message.
+   reports the historical deals as skipped for *"clock predates go-live"* and
+   that no emails go out for them. **This is the single most important test.**
+   Every one of those 62 deals has a populated clock, so `GO_LIVE_DATE` is the
+   only thing holding them back. If this fails, do not switch on.
+3. **Day 2 fires.** The clock is Zoho's own `Stage_Modified_Time`, so you cannot
+   edit it directly. Move the test deal out of Formal Quote Sent and back in
+   yesterday, or temporarily set `GO_LIVE_DATE` earlier and use a deal whose
+   stage changed the previous business day. Run Zap 2 and confirm the Day 2
+   email arrives with the suggested text message.
 4. **Same-day activity suppresses the nudge.** Log a call against the test deal,
    then run Zap 3. Confirm nothing is sent and the summary reports one
    suppressed.
 5. **Won stops everything.** Move the test deal to Won and run both Zaps.
    Confirm it no longer appears at all.
-6. **The weekend is skipped.** Set the clock to a Friday and run Zap 2 with the
-   schedule trigger on a Monday. Confirm it reports Day 2, not Day 4.
+6. **The weekend is skipped.** Use a deal whose stage changed on a Friday and
+   run Zap 2 on the Monday. Confirm it reports Day 2, not Day 4.
 
 7. **Two reminders on the same day both arrive.** Put two test deals into the
    Day 2 window and run Zap 2. Confirm **both** emails go out. This is the
    Looping step doing its job, and it is the one failure mode that would
    otherwise be invisible.
 
-The Code steps also ship with 45 unit tests covering the weekend arithmetic, the
-year boundary, the Day 4 activity rules, duplicate webhooks, journey restarts,
-missing contacts, missing owner emails and empty API responses. They need no
+The Code steps also ship with 43 unit tests covering the weekend arithmetic, the
+year boundary, the Day 4 activity rules, the go-live backlog guard, a backlog
+deal legitimately re-entering the stage, missing contacts, missing owner emails
+and empty API responses. They need no
 Zapier account and no network access:
 
 ```
@@ -393,13 +401,12 @@ These are deliberate choices for a first version, not oversights.
    record, no webhook fires, no clock is written and that proposal quietly gets
    no reminders.
 
-   Two things to do about it. First, **audit how the stage actually gets set**
-   in this org — if it is always a person in the CRM interface, the gap is
-   theoretical. Second, if it is not, add a nightly reconciliation Zap that
-   searches for deals at Formal Quote Sent with a blank clock and a
-   `Date_Proposal_Sent` within the last two business days, and starts their
-   journey. That criteria deliberately excludes the historical backlog, whose
-   proposal dates are all old or blank.
+   The saving grace is that this only costs you the **Day 1 email**. Days 2 to
+   4 are driven by the scheduled queries, which read `Stage_Modified_Time`
+   directly and neither know nor care how the stage got set. So a proposal whose
+   stage was set by an import still gets its full run of reminders; it just
+   never gets the opening confirmation. Worth knowing, not worth engineering
+   around.
 
 6. **An unmonitored Zap is not good enough for the long run.** Zoho CRM
    connections on Zapier have a documented habit of failing to refresh, which

@@ -15,7 +15,7 @@ function run(label, deals, nowIso, expect){
 }
 function d(clock, lastActivity, name='Deal A', email='matt@cprgroup.com.au'){
   return {id:'111', Deal_Name:name, Owner:{name:'Matt McEwan',email}, Account_Name:{name:'Gympie United FC'},
-          Contact_Name:{name:'Andrew Kruger'}, Followup_Clock_Started:clock, Last_Activity_Time:lastActivity};
+          Contact_Name:{name:'Andrew Kruger'}, Stage_Modified_Time:clock+"T09:00:00+10:00", Last_Activity_Time:lastActivity};
 }
 
 // Proposal Tue 15 Sep. Afternoon run = 15:00 Brisbane = 05:00 UTC same day.
@@ -26,7 +26,7 @@ run('Day 3, activity logged today -> suppressed', [d('2026-09-15','2026-09-17T11
 run('Day 4 -> NO afternoon nudge (escalation already sent)', [d('2026-09-15','2026-09-15T15:48:00+10:00')], '2026-09-18T05:00:00Z', []);
 run('Day 1 -> no nudge', [d('2026-09-15',null)], '2026-09-15T05:00:00Z', []);
 run('Weekend -> no nudge', [d('2026-09-18','2026-09-18T10:00:00+10:00')], '2026-09-19T05:00:00Z', []);
-run('Legacy null clock -> excluded', [{...d('2026-09-15',null), Followup_Clock_Started:null}], '2026-09-16T05:00:00Z', []);
+run('No stage-modified time -> excluded', [{...d('2026-09-15',null), Stage_Modified_Time:null}], '2026-09-16T05:00:00Z', []);
 run('Pre go-live clock -> excluded', [d('2026-09-01',null)], '2026-09-02T05:00:00Z', []);
 run('No owner email -> dropped', [d('2026-09-15','2026-09-15T15:00:00+10:00','Deal A',null)], '2026-09-16T05:00:00Z', []);
 

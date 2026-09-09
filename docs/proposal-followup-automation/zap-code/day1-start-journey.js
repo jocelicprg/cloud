@@ -6,20 +6,17 @@
  * Position:    Step 4, after the Catch Hook, the deal re-read and the Filter
  *
  * WHAT THIS STEP DOES
- *   Starts the journey clock and builds the Day 1 confirmation email. The clock
- *   is what every later reminder counts from, and it is set here rather than
- *   inferred, for two reasons:
+ *   Builds the Day 1 confirmation email. That is all it does.
  *
- *   1. Date_Proposal_Sent is blank on 9 of the 62 deals currently at this stage,
- *      so keying the journey off it would silently skip roughly one proposal in
- *      seven.
- *   2. Writing the clock on each entry to the stage gives the "revised proposal
- *      restarts the journey" rule for free. Move a deal out of Formal Quote Sent
- *      and back in, and the clock resets to that day.
+ *   This step writes NOTHING back to CRM. The journey clock is Zoho's own
+ *   Stage_Modified_Time, which Zoho maintains for free, so there is no custom
+ *   field to create and no field to stamp. That also removes two hazards: a
+ *   write-back cannot re-trigger the workflow rule, and a consultant-entered
+ *   Date_Proposal_Sent can never be overwritten.
  *
- *   It also fills in Date_Proposal_Sent when the consultant left it blank. That
- *   is a free data-quality win for the weekly reporting, and it never overwrites
- *   a date a consultant has actually entered.
+ *   The trade-off is that Stage_Modified_Time is populated on every deal
+ *   already sitting at this stage, so the go-live date in the scheduled Zaps
+ *   is what keeps the existing backlog out. See BUILD-SPEC.md section 1.
  *
  * REQUIRED INPUT DATA
  *   payload  ->  the raw response body of the "re-read the deal" GET step
@@ -89,25 +86,6 @@ if (deal.Stage !== EXPECTED_STAGE) {
   return {
     send: 'no',
     reason: 'Deal is at "' + deal.Stage + '", not "' + EXPECTED_STAGE + '". No journey started.',
-    clock_date: '',
-    set_proposal_date: '',
-    to: '',
-    subject: '',
-    body: ''
-  };
-}
-
-// Zoho is documented to deliver some webhooks twice. The clock field makes an
-// idempotency check free: if it already reads today, this journey has started
-// and a second Day 1 email would just be noise.
-if (deal.Followup_Clock_Started === today) {
-  return {
-    send: 'no',
-    reason: 'Journey already started today for this deal. Treating as a duplicate webhook.',
-    clock_date: '',
-    set_proposal_date: '',
-    contact_missing: '',
-    deal_id: deal.id,
     to: '',
     subject: '',
     body: ''
@@ -120,8 +98,6 @@ var ownerName = lookupName(deal.Owner, '');
 var ownerFirstName = ownerName ? String(ownerName).trim().split(/\s+/)[0] : 'there';
 var ownerEmail = (deal.Owner && deal.Owner.email) ? deal.Owner.email : '';
 
-// Only fill the proposal date when the consultant has left it blank.
-var setProposalDate = deal.Date_Proposal_Sent ? '' : today;
 var effectiveSentDate = deal.Date_Proposal_Sent || today;
 
 var lines = [
@@ -162,16 +138,17 @@ lines.push(
 if (!deal.Date_Proposal_Sent) {
   lines.push(
     '',
-    'Note: the proposal date was blank, so it has been set to today.'
+    'The proposal date on this deal is blank. It does not affect the reminders,',
+    'which count from the stage change, but it does feed the weekly reporting,',
+    'so it is worth filling in.'
   );
 }
 
 return {
   send: ownerEmail ? 'yes' : 'no',
   reason: ownerEmail ? 'ok' : 'Deal has no owner email, so no Day 1 email was sent.',
-  clock_date: today,
-  set_proposal_date: setProposalDate,
   contact_missing: contactName ? 'no' : 'yes',
+  proposal_date_blank: deal.Date_Proposal_Sent ? 'no' : 'yes',
   deal_id: deal.id,
   to: ownerEmail,
   subject: 'Proposal follow-up started - ' + organisation,

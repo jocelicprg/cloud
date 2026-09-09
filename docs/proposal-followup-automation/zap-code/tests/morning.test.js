@@ -8,14 +8,14 @@ function baseDeals(clock) {
      Owner:{name:'Matt McEwan', email:'matt@cprgroup.com.au'},
      Account_Name:{name:'Gympie United Football Club'},
      Contact_Name:{name:'Andrew Kruger'},
-     Date_Proposal_Sent:clock, Followup_Clock_Started:clock,
+     Date_Proposal_Sent:clock, Stage_Modified_Time:clock+"T09:00:00+10:00",
      Last_Activity_Time:clock+'T15:48:37+10:00'},
     // Chris's deal with NO contact record - real data-quality case.
     {id:'4061076000092020035', Deal_Name:'2026 Online Meeting', Amount:400,
      Owner:{name:'Chris Kenward', email:'chris@cprgroup.com.au'},
      Account_Name:{name:'Sarina Golf Club'},
      Contact_Name:null,
-     Date_Proposal_Sent:clock, Followup_Clock_Started:clock,
+     Date_Proposal_Sent:clock, Stage_Modified_Time:clock+"T09:00:00+10:00",
      Last_Activity_Time:clock+'T13:18:34+10:00'},
   ];
 }
@@ -90,10 +90,19 @@ t('Day 3 still sent even though activity logged (prompt, not escalation)',
 
 // GO-LIVE GUARD: the 62-deal legacy backlog.
 let legacy = baseDeals('2026-09-15');
-legacy[0].Followup_Clock_Started = null;            // 53 of 62 look like this
-legacy[1].Followup_Clock_Started = '2026-09-08';    // pre go-live
-t('Legacy backlog excluded (null clock + pre go-live clock)',
+// Real backlog dates. Stage_Modified_Time is populated on all 62 of these, so
+// the go-live guard is the only thing holding them back.
+legacy[0].Stage_Modified_Time = '2025-04-02T09:00:00+10:00';  // 18 months old
+legacy[1].Stage_Modified_Time = '2026-09-08T09:00:00+10:00';  // 2 days pre go-live
+t('Legacy backlog excluded by the go-live guard',
   legacy, '2026-09-15T22:00:00Z', []);
+
+// A backlog deal moved back into the stage after go-live must fire: that is a
+// revised proposal restarting, and it is the flip side of the same guard.
+let restarted = baseDeals('2026-09-15');
+restarted[1].Stage_Modified_Time = '2025-04-02T09:00:00+10:00';
+t('Backlog deal re-entering the stage after go-live rejoins the journey',
+  restarted, '2026-09-15T22:00:00Z', ['2026 Strategic Plan|day2|cc=-']);
 
 // EMPTY / 204 responses.
 (function(){
