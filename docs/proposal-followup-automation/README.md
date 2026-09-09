@@ -13,6 +13,7 @@ and built in Zapier. It reminds the consultant; it never contacts the client.
 | [crm-reference.md](crm-reference.md) | Verified field names, stage values, three API traps and the real proposal volumes |
 | [messages.md](messages.md) | The reminder wording, including the drafted Day 7, 14 and 20 messages |
 | [TEAM-EMAIL.md](TEAM-EMAIL.md) | The announcement to send the team once the Zaps are on |
+| [COPILOT-PROMPTS.md](COPILOT-PROMPTS.md) | Prompts for Zapier Copilot to scaffold each Zap, and how to request the early access that would let Claude build them |
 | [zap-code/](zap-code/) | The JavaScript for each Code step, plus 43 unit tests |
 
 ## How it works, in one paragraph
