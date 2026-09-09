@@ -48,6 +48,12 @@ chk('surfaces the two undated proposals',
 chk('pre go-live proposal excluded',
   !out.body.join('\n').includes('Helensvale Cricket Club'));
 
+chk('also exposes emails[] for loops wired that way',
+  Array.isArray(out.emails) && out.emails.length === out.email_count &&
+  out.emails.every(e => e.to && e.subject && e.body !== undefined));
+chk('emails[] matches the parallel arrays',
+  out.emails.every((e, i) => e.to === out.to[i] && e.subject === out.subject[i]));
+
 console.log('\nemails: ' + out.email_count + ' -> ' + JSON.stringify(out.to));
 console.log('\n--- ' + out.subject[0] + ' ---\n' + out.body[0]);
 if (out.body[1]) console.log('\n--- ' + out.subject[1] + ' ---\n' + out.body[1]);

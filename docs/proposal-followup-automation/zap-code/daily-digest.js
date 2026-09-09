@@ -326,6 +326,15 @@ if (missing.length) {
     missing.join(', ') + '. They received nothing. Add them to OWNER_EMAILS.');
 }
 
+// Returned two ways on purpose, so either loop mapping style works:
+//   parallel arrays      -> map  to / cc / subject / body
+//   array of objects     -> map  emails[]to / emails[]cc / ...
+// Zapier exposes both as line items. Use whichever the Looping step is already
+// wired to; do not map both.
+var emails = to.map(function (address, i) {
+  return { to: address, cc: cc[i], subject: subject[i], body: body[i] };
+});
+
 return {
   email_count: to.length,
   examined: examined,
@@ -333,5 +342,6 @@ return {
   cc: cc,
   subject: subject,
   body: body,
-  due_count: counts
+  due_count: counts,
+  emails: emails
 };
