@@ -42,6 +42,35 @@ var GO_LIVE_DATE = '2026-09-10';
 // Copied in when a proposal has gone four business days with nothing recorded.
 var ESCALATION_CC = 'nathan.butcher@cprgroup.com.au';
 
+// Zapier's "Find Module Entries" returns the deal owner as Owner_id and
+// Owner_name only - there is no email address in the payload - so the id has to
+// be mapped here. Read from the CRM user list on 9 September 2026.
+//
+// KEEP THIS UP TO DATE. Someone who joins and is given deals but is missing
+// from this list gets no reminders, and the Zap history logs their name.
+var OWNER_EMAILS = {
+  '4061076000000222013': 'michael@cprgroup.com.au',       // Michael Connelly
+  '4061076000001087001': 'steve@cprgroup.com.au',         // Steve Connelly
+  '4061076000001088001': 'chris@cprgroup.com.au',         // Chris Kenward
+  '4061076000014390001': 'matt@cprgroup.com.au',          // Matt McEwan
+  '4061076000038403001': 'scott@cprgroup.com.au',         // Scott Henry
+  '4061076000000764001': 'courtney@cprgroup.com.au',      // Courtney Frederiksen
+  '4061076000043863001': 'nathan.butcher@cprgroup.com.au',// Nathan Butcher
+  '4061076000002094001': 'jess@cprgroup.com.au',          // Jess Connelly
+  '4061076000039956001': 'joceli@cprgroup.com.au',        // Joceli Coelho
+  '4061076000072395001': 'adrian.wright@cprgroup.com.au', // Adrian Wright
+  '4061076000078172001': 'marcelle.carvalho@cprgroup.com.au', // Marcelle Carvalho
+  '4061076000072484005': 'patrisha@cprgroup.com.au',      // Patrisha De Guzman
+  '4061076000072551001': 'gabriela.silva@cprgroup.com.au',// Gabriela Silva
+  '4061076000072561001': 'rafaela.ramos@cprgroup.com.au', // Rafaela Ramos
+  '4061076000077269001': 'johnny.ramalho@cprgroup.com.au' // Johnny Ramalho
+};
+
+// Zapier's Find Module Entries returns at most this many records per run.
+// Hitting it exactly is a sign results were truncated and a proposal may have
+// been missed, so the step says so loudly in the Zap history.
+var SEARCH_RESULT_CAP = 10;
+
 var CRM_DEAL_URL = 'https://crm.zoho.com.au/crm/org691602767/tab/Potentials/';
 
 // What to prompt on each business day after the proposal went out.
@@ -99,8 +128,17 @@ function longDate(parts) {
 // FIELDS
 // ---------------------------------------------------------------------------
 
-function nameOf(field, fallback) {
-  return (field && field.name) ? field.name : fallback;
+// Zapier flattens Zoho lookup fields: Account_Name becomes Account_Name_name
+// plus Account_Name_id, rather than a nested object. When the lookup is empty
+// the flattened keys are absent and a bare null is returned instead. Both the
+// flattened and nested shapes are handled so the step also works against a raw
+// Zoho response, which is what the unit tests use for some cases.
+function nameOf(deal, key, fallback) {
+  var flat = deal[key + '_name'];
+  if (flat) return flat;
+  var nested = deal[key];
+  if (nested && nested.name) return nested.name;
+  return fallback;
 }
 
 function firstName(full) {
@@ -127,6 +165,11 @@ function readDeals(raw) {
     }
   }
   if (Array.isArray(parsed)) return parsed;
+  // Zapier's Find Module Entries wraps the records as {results:[{entries:[...]}]}.
+  if (parsed.results && parsed.results.length && parsed.results[0].entries) {
+    return parsed.results[0].entries;
+  }
+  // A raw Zoho API response uses {data:[...]}.
   return parsed.data || [];
 }
 
@@ -141,11 +184,20 @@ var goLive = toParts(GO_LIVE_DATE);
 // consultant email -> { name, due: [], undated: [] }
 var byConsultant = {};
 
+var unknownOwners = {};
+
 function bucket(deal) {
-  var email = (deal.Owner && deal.Owner.email) ? deal.Owner.email : '';
-  if (!email) return null;
+  var ownerName = nameOf(deal, 'Owner', '');
+  var email = OWNER_EMAILS[deal.Owner_id] ||
+              ((deal.Owner && deal.Owner.email) ? deal.Owner.email : '');
+  if (!email) {
+    // Surface rather than silently drop: somebody owns deals and is not in the
+    // list above, so they are getting no reminders at all.
+    unknownOwners[ownerName || deal.Owner_id || 'unknown'] = true;
+    return null;
+  }
   if (!byConsultant[email]) {
-    byConsultant[email] = { name: firstName(nameOf(deal.Owner, '')), due: [], undated: [] };
+    byConsultant[email] = { name: firstName(ownerName), due: [], undated: [] };
   }
   return byConsultant[email];
 }
@@ -156,8 +208,8 @@ for (var i = 0; i < deals.length; i++) {
   var deal = deals[i];
   examined++;
 
-  var org = nameOf(deal.Account_Name, 'client not recorded');
-  var contact = nameOf(deal.Contact_Name, null);
+  var org = nameOf(deal, 'Account_Name', 'client not recorded');
+  var contact = nameOf(deal, 'Contact_Name', null);
   var sent = toParts(deal.Date_Proposal_Sent);
 
   // No proposal date means the clock cannot be counted. Rather than drop these
@@ -261,6 +313,18 @@ Object.keys(byConsultant).forEach(function (email) {
 
 console.log('Examined ' + examined + ' deals at Formal Quote Sent, skipped ' +
   skipped + ', emailing ' + to.length + ' consultant(s).');
+
+if (examined >= SEARCH_RESULT_CAP) {
+  console.log('WARNING: the search returned ' + examined + ' records, which is ' +
+    'the maximum Zapier returns. Results may have been truncated and a proposal ' +
+    'may have been missed. See BUILD-SPEC.md section 7.');
+}
+
+var missing = Object.keys(unknownOwners);
+if (missing.length) {
+  console.log('WARNING: no email address known for deal owner(s): ' +
+    missing.join(', ') + '. They received nothing. Add them to OWNER_EMAILS.');
+}
 
 return {
   email_count: to.length,

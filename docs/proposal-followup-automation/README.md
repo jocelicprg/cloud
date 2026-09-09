@@ -30,7 +30,7 @@ logic to go wrong.
 ## Run the tests
 
 ```
-node docs/proposal-followup-automation/zap-code/tests/digest.test.js
+node docs/proposal-followup-automation/zap-code/tests/run-all.js
 ```
 
 No Zapier account or network access needed.

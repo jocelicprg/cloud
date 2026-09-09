@@ -59,22 +59,28 @@ break and the email arrives as one run-on paragraph.
 
 ## 6. Test the search step
 
-Test step 2. Expect roughly **62 deals**.
+Test step 2. Expect **10 records** — that is Zapier's cap, not a fault, and the
+Code step handles it. They come back most-recently-modified first.
 
-Open one record and confirm it contains `Date_Proposal_Sent`,
-`Last_Activity_Time`, `Owner` **including an email address**, `Account_Name`
-and `Contact_Name`.
+Each record should contain `Date_Proposal_Sent`, `Last_Activity_Time`,
+`Owner_id`, `Owner_name`, `Account_Name_name` and usually `Contact_Name_name`.
 
-**If `Owner` has no email address, stop.** The digest addresses each email using
-that field, and the code needs changing before going further.
+There is deliberately **no owner email address** in this payload. The Code step
+maps `Owner_id` to an address itself. This was all verified against the live CRM
+on 10 September 2026, so it should match what you see.
 
 ## 7. The backlog test
 
 Test the Code step against that real data.
 
-- `email_count` must be **0**
+- `email_count` must be **0**, or a small number covering only proposals dated
+  on or after `GO_LIVE_DATE`
 - the log line should read like
-  `Examined 62 deals at Formal Quote Sent, skipped 60, emailing 0 consultant(s)`
+  `Examined 10 deals at Formal Quote Sent, skipped 7, emailing 2 consultant(s)`
+- a warning about hitting the 10-record maximum is expected and fine
+
+A consultant may legitimately get an email listing proposals with no proposal
+date. That is the undated section doing its job, not a fault.
 
 **If `email_count` is above 0, do not switch on.** Those 62 open proposals go
 back as far as 2024, and switching on would email the whole team about all of
@@ -123,4 +129,6 @@ Common causes, in the order worth checking:
 | The email is one run-on paragraph | Gmail Body type is set to `Html` instead of `Plain` |
 | A proposal never appears | Its `Date Proposal Sent` is blank. It should be listed in that consultant's digest under the undated section |
 | Reminders go to the wrong person | The deal owner is an administrator rather than the consultant |
+| One consultant never gets anything | Their Zoho user id is missing from `OWNER_EMAILS` in the code. The Zap history names them |
+| The truncation warning appears every day | The 10-record cap is biting. See build spec section 7 |
 | It fires at the wrong hour | The Zapier **account** timezone, not the Zap's |

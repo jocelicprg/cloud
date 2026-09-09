@@ -62,13 +62,42 @@ quietly.
 | # | App / action | Configuration |
 |---|---|---|
 | 1 | **Schedule by Zapier** → Every Day | Time `8:00 AM`. **Trigger on weekends: No** |
-| 2 | **Zoho CRM** → Find Module Entries | Module `Deals`, Field name `Stage`, Value `Formal Quote Sent`. Leave *Field name 2* empty |
+| 2 | **Zoho CRM** → Find Module Entries | Module `Deals`, Field name `Stage`, Value `Formal Quote Sent`. Leave *Field name 2* empty. Tested against the live CRM on 10 September 2026 |
 | 3 | **Code by Zapier** → Run JavaScript | Paste [`zap-code/daily-digest.js`](zap-code/daily-digest.js). Input Data: one field named `payload`, mapped to the raw output of step 2 |
 | 4 | **Filter by Zapier** | Continue only if `email_count` from step 3 is **greater than** `0` |
 | 5 | **Looping by Zapier** → Create Loop From Line Items | Map from step 3: `to`, `cc`, `subject`, `body` |
 | 6 | **Gmail** → Send Email | Inside the loop. **To** = `to`, **Cc** = `cc`, **Subject** = `subject`, **Body** = `body`, all from the **loop** step. **Body type** = `Plain` |
 
-Three things that are easy to get wrong:
+### What this action actually returns
+
+Tested against CPR Group's live CRM rather than assumed, because it does three
+surprising things the Code step has to absorb.
+
+**It flattens lookup fields.** `Account_Name` comes back as `Account_Name_name`
+plus `Account_Name_id`, not a nested object — and when the lookup is empty the
+flattened keys are missing and a bare `null` appears instead. Same for
+`Contact_Name` and `Owner`.
+
+**It does not return the owner's email address.** Only `Owner_id` and
+`Owner_name`. Since the whole digest is addressed off that, the Code step
+carries an `OWNER_EMAILS` map from Zoho user id to address, built from the CRM
+user list. **Keep it current:** somebody who joins, is given deals and is not in
+that map receives nothing at all. The step logs their name as a warning when it
+happens, so check the Zap history if a consultant says they get nothing.
+
+**It returns at most 10 records.** There is no page or limit parameter to raise
+it. With 62 deals at this stage, that is a real truncation. It is survivable
+because the action returns the most recently modified records first and a
+proposal in its day 2 to 4 window has necessarily been touched recently, but it
+is the thing most likely to bite as the pipeline grows. The Code step logs a
+loud warning whenever exactly 10 come back. If that warning becomes routine, see
+section 7.
+
+**Zapier's raw API Request action is not an option here.** It returns `401`
+against both Zoho data centre domains and on both connections, while the
+packaged action works fine on the same credentials.
+
+### Three things that are easy to get wrong:
 
 **Body type must be `Plain`.** The Code step builds the email with real line
 breaks. `Html` collapses every one of them into a single run-on paragraph.
@@ -138,12 +167,29 @@ deals with no contact or no owner, and malformed API responses. No Zapier
 account or network needed:
 
 ```
-node docs/proposal-followup-automation/zap-code/tests/digest.test.js
+node docs/proposal-followup-automation/zap-code/tests/run-all.js
 ```
 
 ---
 
-## 7. Known limitations
+## 7. If the truncation warning becomes routine
+
+The 10-record cap is the one limit with a plausible path to causing a miss. If
+the Zap history starts showing the warning most days, the fix is to stop asking
+for every deal at the stage and ask for specific dates instead:
+
+1. Add a Code step before the search that returns the three dates matching
+   business days 2, 3 and 4 back from today.
+2. Replace the single search with three Find Module Entries steps, each using
+   *Field name* `Stage` = `Formal Quote Sent` and *Field name 2*
+   `Date Proposal Sent` = one of those dates.
+3. Feed all three results into the digest step.
+
+Each search then returns a handful of records and the cap stops mattering. The
+cost is losing the undated-proposal section, since a blank date cannot be
+searched for.
+
+## 8. Known limitations
 
 Deliberate choices for a first version, not oversights.
 
@@ -159,11 +205,14 @@ Deliberate choices for a first version, not oversights.
 5. **A blank proposal date delays a proposal entering the journey** until
    someone fills it in. It is listed in the digest rather than dropped, so it is
    visible, but it will not be counted until dated.
-6. **Nothing reaches a client automatically.** By design.
+6. **The owner email map is maintained by hand.** See section 3. A new starter
+   who owns deals and is not in it gets nothing, though the Zap history says so.
+7. **At most 10 proposals are examined per run.** See section 7.
+8. **Nothing reaches a client automatically.** By design.
 
 ---
 
-## 8. What was cut, and what it would take to add back
+## 9. What was cut, and what it would take to add back
 
 Earlier drafts had three Zaps: an instant Day 1 confirmation driven by a Zoho
 workflow rule and webhook, this morning digest, and a 15:00 Zoho Cliq nudge on
