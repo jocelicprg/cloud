@@ -97,6 +97,7 @@ string standalone.proposal_followup_digest()
 
             sentRaw = ifnull(deal.get("Date_Proposal_Sent"), "");
             lastRaw = ifnull(deal.get("Last_Activity_Time"), "");
+            createdRaw = ifnull(deal.get("Created_Time"), "");
 
             if(ownerEmail == "")
             {
@@ -123,13 +124,44 @@ string standalone.proposal_followup_digest()
 
                 if(sentRaw == "")
                 {
-                    // Cannot be counted. Listed in the digest, never dropped.
+                    // A proposal with no date cannot be counted, and cannot be
+                    // compared against GO_LIVE either. Without a second guard
+                    // the whole undated backlog lands in someone's inbox on the
+                    // first morning: the first dry run would have sent Chris a
+                    // list of eight proposals, several from 2025.
+                    //
+                    // So fall back to when the deal was created. A proposal
+                    // raised since go-live and missing its date is worth
+                    // chasing; one raised last year is backlog, and belongs in
+                    // the regular deal review instead.
+                    //
                     // Deluge will not chain .add() onto a .get(), so the list
-                    // is pulled out, changed, and put back. Same below for
-                    // "due". This is what caused "syntax is incorrect".
-                    undatedList = bucket.get("undated");
-                    undatedList.add("- " + org + ", " + dealName + "  " + CRM_DEAL_URL + dealId);
-                    bucket.put("undated", undatedList);
+                    // is pulled out, changed, and put back. Same below for "due".
+                    includeUndated = false;
+                    if(createdRaw != "")
+                    {
+                        createdText = createdRaw.subString(0,10);
+                        createdDate = createdText.toDate();
+                        if(createdDate >= GO_LIVE)
+                        {
+                            includeUndated = true;
+                        }
+                    }
+
+                    if(includeUndated)
+                    {
+                        undatedList = bucket.get("undated");
+                        undatedList.add("- " + org + ", " + dealName + "  " + CRM_DEAL_URL + dealId);
+                        bucket.put("undated", undatedList);
+                    }
+                    else
+                    {
+                        skipped = skipped + 1;
+                        if(DEBUG_DATES)
+                        {
+                            info "UNDATED skipped as pre go-live - " + org + " | created=" + createdRaw;
+                        }
+                    }
                 }
                 else
                 {

@@ -73,6 +73,18 @@ runs inside the system that owns the data.
 Weekend suppression is handled inside the function by `workDaysBetween`, so a
 daily schedule is correct — it simply finds nothing due on a Saturday.
 
+## How undated proposals are handled
+
+A proposal with no `Date Proposal Sent` cannot be counted, and cannot be
+compared against `GO_LIVE` either. Left alone, the entire undated backlog lands
+in someone's inbox on the first morning — the first dry run against live data
+would have sent Chris a list of eight proposals, several from 2025.
+
+So the function falls back to the deal's **created date**. A proposal raised
+since go-live and missing its date is worth chasing, and appears in that
+consultant's digest under a short "please add the date" section. One raised
+last year is backlog, and stays in the regular deal review where it belongs.
+
 ## Two things to check on the first run
 
 This script has **not been executed** — Deluge cannot be run from outside CRM,
