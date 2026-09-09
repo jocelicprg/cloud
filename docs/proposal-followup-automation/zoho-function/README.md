@@ -22,7 +22,22 @@ runs inside the system that owns the data.
 ## Install
 
 1. **Setup → Developer Space → Functions → New Function**
-   - Category: Standalone, Display name: `Proposal follow-up digest`
+   - Category: **Standalone**, Display name: `Proposal follow-up digest`
+   - Zoho requires a function signature as the very first line, and rejects
+     bare code with *"Improper code format"*. The file already carries one:
+
+     ```
+     void standalone.proposal_followup_digest()
+     ```
+
+     **The name in that line must match the function name Zoho assigned.**
+     When you create the function, Zoho derives an API name from the display
+     name and pre-fills the signature in the editor. Either keep Zoho's
+     signature line and paste only the body between its braces, or paste the
+     whole file and edit `proposal_followup_digest` to match the name Zoho
+     shows. A mismatch produces the same error.
+   - Nothing may sit above the signature, not even a comment, which is why the
+     documentation block is inside the function.
    - Paste [`proposal_followup_digest.dg`](proposal_followup_digest.dg), save.
 2. Set `GO_LIVE` near the top to the date you switch on, and leave
    `SEND_EMAILS = false` for now.
