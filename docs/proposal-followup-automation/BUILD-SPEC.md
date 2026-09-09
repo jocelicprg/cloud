@@ -69,11 +69,24 @@ trigger a reminder.** No date cutoff to remember, no risk of a go-live flood.
 
 Work through these before building. Items 1 and 2 are blocking.
 
-- [ ] **1. Reconnect Zoho CRM in Zapier.** The current default connection is
-      stale and returns `401`. This was verified on 9 September 2026 and *will*
-      break every Zap here until it is fixed. There are two Zoho CRM
-      connections on the account, both created some time ago — reconnect and
-      then make sure all three Zaps use the same working one.
+- [ ] **1. Reconnect Zoho CRM in Zapier.** Verified broken on 9 September 2026,
+      and it *will* break every Zap here until it is fixed. Both Zoho CRM
+      connections on the account fail when an action actually runs: the default
+      one reports "stale and needs reconnecting", and the newer one returns
+      `401` from the Zoho API. Note that the connection list reports both as
+      healthy — the failure only shows up on execution, so do not trust the
+      list view.
+
+      Reconnect from the Zapier app's connection settings, or via these direct
+      links, then make sure all three Zaps use the same working connection:
+
+      - 2023 connection: `https://mcp.zapier.com/api/v1/connect-auth/ZohoCRMCLIAPI?accountId=16514155&connectionId=41839055`
+      - 2024 connection: `https://mcp.zapier.com/api/v1/connect-auth/ZohoCRMCLIAPI?accountId=16514155&connectionId=50277482`
+
+      Because CPR Group is on the Australian data centre, authorise against
+      **zoho.com.au**, not zoho.com. An AU org authorised against the US domain
+      is the most likely cause of a connection that looks valid but returns
+      `401` on every call.
 - [ ] **2. Connect Zoho Cliq in Zapier.** Zoho Cliq is available on Zapier and
       has the action we need (`Message to User`, addressed by email address),
       but it is **not currently connected**. Only the 15:00 nudges depend on it,
@@ -88,7 +101,10 @@ Work through these before building. Items 1 and 2 are blocking.
       Leave it off the layout if you prefer it hidden from consultants — the API
       writes to it either way. Do **not** backfill it. Its blankness on the 62
       historical deals is what protects them.
-- [ ] **4. Decide the sending mailbox** for the reminder emails. See §6.
+- [ ] **4. Set a default Gmail connection and decide the sending mailbox.**
+      There are **five** Gmail connections on the account and **no default is
+      set**, so a Gmail step will not know which mailbox to send from until one
+      is chosen. Pin it explicitly in the Zap. See §6.
 - [ ] **5. Sort out the schedule timezone.** This one catches people out:
       **Schedule triggers use the timezone on the Zapier *account*, not the
       timezone on the Zap.** Setting the Zap timezone changes nothing about when
@@ -196,7 +212,7 @@ restart — that case is covered by a test.
 | 4 | **Code by Zapier** → Run JavaScript | Paste [`zap-code/morning-0800.js`](zap-code/morning-0800.js). Input Data: `payload` = raw response body from step 3 |
 | 5 | **Filter by Zapier** | Continue only if `due_count` from step 4 is **greater than** `0` |
 | 6 | **Looping by Zapier** → Create Loop From Line Items | Map the arrays from step 4: `to`, `cc`, `subject`, `body`, `deal_name`, `day_number` |
-| 7 | **Gmail** → Send Email | Inside the loop. To `to`, Cc `cc`, Subject `subject`, Body `body` — all taken from the **loop** step, not from step 4 |
+| 7 | **Gmail** → Send Email | Inside the loop. **To** = `to`, **Cc** = `cc`, **Subject** = `subject`, **Body** = `body`, all taken from the **loop** step rather than step 4. Leave **Body type** as `Plain` |
 
 Step 3 querystring — three separate key/value rows, not one string:
 
@@ -208,6 +224,11 @@ Step 3 querystring — three separate key/value rows, not one string:
 
 Zapier URL-encodes querystring values, so type the criteria literally — spaces
 in `Formal Quote Sent` included. Do not pre-encode it.
+
+**Leave Body type as `Plain`.** The Code step builds the message as plain text
+with real line breaks. Setting Body type to `Html` collapses every one of them
+and the reminder arrives as a single run-on paragraph. The field names above
+were read from the live Gmail action, so they can be mapped as written.
 
 ### Why there is a Looping step rather than a plain array
 
