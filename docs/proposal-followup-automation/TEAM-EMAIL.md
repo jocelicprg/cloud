@@ -1,8 +1,8 @@
 # Team announcement email
 
-**Status: ready to send once the three Zaps are switched on.** Do not send it
-before then. It tells the team that reminders start on their next proposal, so
-sending it early means people wait for prompts that never arrive.
+**Status: ready to send once the Zap is switched on.** Do not send it before
+then. It tells the team that reminders start on their next proposal, so sending
+it early means people wait for prompts that never arrive.
 
 - **To:** Nathan, Michael, Steve, Chris, Matt, Scott, Courtney, Adrian, Marcelle, Johnny
 - **From:** whichever mailbox you set as the sender in the Zaps
@@ -24,17 +24,21 @@ reminders come to you. Nothing is sent to the client automatically.
 
 **What you will receive**
 
-| When | What arrives | What it asks you to do |
-|---|---|---|
-| Day 1 | Email, straight away | Check the deal is complete and that you are the deal owner |
-| Day 2, 8:00am | Email | Send the client a short text message. Suggested wording is included |
-| Day 2, 3:00pm | Cliq message, only if nothing is recorded that day | Send the text, or update CRM if you have already been in touch |
-| Day 3, 8:00am | Email | Call the client. Suggested follow-up email wording is included in case you do not reach them |
-| Day 3, 3:00pm | Cliq message, only if nothing is recorded that day | Make the call, or update CRM |
-| Day 4, 8:00am | Email, only if nothing has been recorded at all | Follow up today, or update CRM. Nathan is copied on this one |
+One email each weekday morning, listing your proposals that need a follow-up
+that day and what to do about each. If you have nothing due, you get nothing.
 
-Day counting uses business days, so a proposal sent on a Friday reaches Day 2 on
-the Monday. Nothing is sent on weekends.
+| Business day | What the email asks |
+|---|---|
+| Day 2 | Send the client a short text message to check the proposal arrived. Suggested wording is included |
+| Day 3 | Call them. If you do not get through, leave a voicemail and send a short email straight after |
+| Day 4 | Follow up today, or update CRM if you have already been in touch. This one only arrives if nothing has been recorded at all, and Nathan is copied |
+
+Days are counted in business days, so a proposal sent on a Friday reaches Day 2
+on the Monday. Nothing is sent on weekends. After Day 4 the proposal drops out
+and goes back to the regular deal review.
+
+If a proposal has no proposal date recorded, the email will say so and ask you
+to add it, because the follow-up cannot be counted without it.
 
 **Three things worth knowing**
 
@@ -52,10 +56,11 @@ Sent and back in. That restarts the four days from the new send date.
 **On volume**
 
 We looked at the last ten weeks before building this. Across the whole team we
-send about 1.4 proposals per business day, so on a typical day you should expect
-one or two of these, not a flood. The proposals already sitting in Formal Quote
-Sent will not generate reminders. Only proposals sent from now on enter the
-process.
+send about 1.4 proposals per business day, and the busiest of us 0.42. So a
+typical morning is one email about one proposal. On the busiest day in those ten
+weeks it would have been one email listing three. The proposals already sitting
+in Formal Quote Sent will not generate anything. Only proposals sent from now on
+enter the process.
 
 **What we are not doing**
 
@@ -74,20 +79,20 @@ https://claude.ai/code/artifact/cb3b119c-9855-416f-9614-0cf2a0365b1f
 
 It is the quickest way to see where your prompts come from and what stops them.
 
-**The rest of the journey, for your feedback**
+**What we have deliberately left out for now**
 
-The design continues past Day 4, and we have deliberately not switched that part
-on yet:
+The design continues past Day 4, and we have not switched that part on:
 
-- Day 7, a one-week check-in reminder
+- Day 7, a one-week check-in
 - Day 14, a two-week review, aiming to establish whether the client is
   proceeding, needs more time, is waiting on funding or has decided against it
-- Day 20, a final review, after which the deal leaves this process and goes back
-  to the regular deal review
+- Day 20, a final review, after which the deal goes back to the regular deal
+  review
 
-We would rather you judge the intensive first four days before we add the longer
-tail. If the first four days work and the rest would just be noise, we will
-leave it off.
+We also left out an afternoon chat reminder on days 2 and 3, and an immediate
+confirmation when you mark a proposal as sent. All of it is designed and easy to
+add. We would rather you judge the simple version first than switch on six
+things at once and have you turn the lot off.
 
 **What we need from you**
 
@@ -101,9 +106,9 @@ Two habits make the difference between this working and not working:
 
 Joceli is on leave from Thursday, so the plan is to run the first four days as
 they are and gather your reactions while he is away. Please note anything that
-feels wrong, badly timed or unhelpful, particularly the wording and whether
-3:00pm is the right time for the afternoon nudge. We will work through the
-feedback when he is back.
+feels wrong, badly timed or unhelpful, particularly the wording, whether 8:00am
+is the right time, and whether one digest works better than separate emails per
+proposal. We will work through the feedback when he is back.
 
 There are two known rough edges already. Public holidays are not recognised yet,
 so a long weekend will shift the day count. A voicemail is recorded as a call,
@@ -120,9 +125,7 @@ Thanks
   quoting it again later.
 - The Day 7, 14 and 20 wording is already drafted in `messages.md` if the team
   asks to see it.
-- If Zoho Cliq is not connected in time, delete the two 3:00pm rows from the
-  table and the question about 3:00pm timing in the feedback paragraph, rather
-  than promising something that will not arrive. The journey page linked above
-  would need the same trim.
 - The journey page is private until you share it from the page's share menu.
-  Do that before sending, or the link will not open for anyone else.
+  Do that before sending, or the link will not open for anyone else. It still
+  shows the fuller six-step journey, so either update it or tell the team it is
+  the eventual design rather than what is running.

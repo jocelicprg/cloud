@@ -1,9 +1,12 @@
 # Reminder wording
 
-The Day 1 to Day 4 wording lives in the Code steps, because each message is
-assembled there and handed to the email step ready to send. This page is the
-readable copy of it, plus the drafted wording for Days 7, 14 and 20, which are
-designed but not built.
+The live wording is assembled in [`zap-code/daily-digest.js`](zap-code/daily-digest.js)
+and handed to the Gmail step ready to send. This page is the readable copy,
+plus drafted wording for the parts that are designed but not switched on.
+
+The digest is one email per consultant per morning. Each proposal appears as a
+short block with the organisation, contact, deal, value, date, the action for
+that business day and a link to the deal.
 
 House style applies: Australian English, no Oxford commas, no contractions.
 

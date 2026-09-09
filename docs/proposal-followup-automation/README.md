@@ -1,44 +1,41 @@
-# Proposal follow-up automation
+# Proposal follow-up digest
 
-Prompts a consultant to follow up after a proposal goes out, driven by Zoho CRM
-and built in Zapier. It reminds the consultant; it never contacts the client.
+Each weekday morning, every consultant gets one email listing the proposals that
+need chasing and what to do about each. It prompts the consultant; it never
+contacts the client.
 
-**Built: Day 1 to Day 4. Designed but not switched on: Days 7, 14 and 20.**
+**One Zap. No CRM configuration, no writes to CRM, no new fields.**
 
 ## Start here
 
 | File | What it is |
 |---|---|
-| [BUILD-SPEC.md](BUILD-SPEC.md) | How to build the three Zaps, step by step. Read section 1 first — it explains the one design decision everything else follows from |
+| [BUILD-SPEC.md](BUILD-SPEC.md) | How to build the Zap. Section 1 explains why it is shaped this way; section 5 is the one thing not to get wrong |
+| [COPILOT-PROMPTS.md](COPILOT-PROMPTS.md) | A prompt that gets Zapier Copilot to scaffold it, and how to request the early access that would let Claude build it |
 | [crm-reference.md](crm-reference.md) | Verified field names, stage values, three API traps and the real proposal volumes |
-| [messages.md](messages.md) | The reminder wording, including the drafted Day 7, 14 and 20 messages |
-| [TEAM-EMAIL.md](TEAM-EMAIL.md) | The announcement to send the team once the Zaps are on |
-| [COPILOT-PROMPTS.md](COPILOT-PROMPTS.md) | Prompts for Zapier Copilot to scaffold each Zap, and how to request the early access that would let Claude build them |
-| [zap-code/](zap-code/) | The JavaScript for each Code step, plus 43 unit tests |
+| [messages.md](messages.md) | The wording, including the drafted Day 7, 14 and 20 messages that are not switched on |
+| [TEAM-EMAIL.md](TEAM-EMAIL.md) | The announcement to send once the Zap is on |
+| [zap-code/daily-digest.js](zap-code/daily-digest.js) | The one Code step, plus 25 unit tests |
 
-## How it works, in one paragraph
+## How it works
 
-Moving a deal to Formal Quote Sent fires a Zoho workflow rule, which sends the
-Day 1 confirmation email. Two scheduled Zaps then wake at 08:00 and 15:00 on
-business days, ask the CRM which deals are currently at that stage, and work out
-what is due today from Zoho's own `Stage_Modified_Time`. Because every run
-re-reads current state, a deal that has been won, lost or parked simply stops
-appearing, and no cancellation logic is needed. Nothing is ever written back to
-CRM. The 62 deals already at Formal Quote Sent are held out by a go-live date in
-the code.
+At 08:00 on weekdays the Zap asks CRM for every deal at `Formal Quote Sent`,
+works out how many business days each has been out, and emails each consultant a
+digest of theirs. Day 2 prompts a text message, day 3 a call, day 4 escalates
+with Nathan copied. Because it re-reads current state each morning, a deal that
+has been won, lost or parked simply stops appearing — there is no cancellation
+logic to go wrong.
 
 ## Run the tests
 
 ```
-node docs/proposal-followup-automation/zap-code/tests/run-all.js
+node docs/proposal-followup-automation/zap-code/tests/digest.test.js
 ```
 
 No Zapier account or network access needed.
 
 ## Before building
 
-Section 2 of the build spec has the full checklist. The two blocking items: the
-Zapier connection to Zoho CRM fails on execution and must be reconnected
-(authorise against **zoho.com.au**, not zoho.com), and Zoho Cliq is not
-connected at all, which only the 15:00 nudges depend on. No CRM fields need
-creating — the automation only reads from Zoho.
+One blocking prerequisite: the Zapier connection to Zoho CRM fails when an
+action runs and must be reconnected, authorising against **zoho.com.au**, not
+zoho.com. Full checklist in section 2 of the build spec.

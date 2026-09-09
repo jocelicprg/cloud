@@ -48,9 +48,9 @@ Stages currently in use: `Cold`, `Warm`, `Short-listed`, `Formal Quote Sent`,
 | `Contact_Name` | lookup | Client contact. `{name, id}` — **can be `null`** |
 | `Deal_Name` | text | Used in the message body |
 | `Amount` | currency | Used in the Day 4 escalation |
-| `Date_Proposal_Sent` | date | The consultant's own record of when the proposal went out |
+| `Date_Proposal_Sent` | date | **The journey clock.** Searchable, already used by the team, and exposed by Zapier's packaged search action. Blank on 9 of 62 open deals, which the digest surfaces rather than hides |
 | `Last_Activity_Time` | datetime | The same-day activity test |
-| `Stage_Modified_Time` | datetime | **The journey clock.** When the stage last changed. Zoho maintains it, so no custom field is needed and nothing is written back — but see trap 1, which makes it easy to break |
+| `Stage_Modified_Time` | datetime | Not used by the current build. Considered as the journey clock and rejected: it cannot be filtered server-side and is not exposed by Zapier's packaged search action. See traps 1 and 2 |
 
 ## Three API traps found while building this
 
@@ -71,9 +71,9 @@ Ordinary date fields such as `Date_Proposal_Sent` **are** searchable, and
 `sort_by` on the search endpoint accepts only `id`, `Created_Time` and
 `Modified_Time`.
 
-Taken together, these are why the scheduled Zaps fetch every deal at Formal
-Quote Sent and filter in code rather than narrowing the query: the clock they
-filter on cannot be expressed in a search criterion or a COQL select.
+Taken together, these are why the build counts from `Date_Proposal_Sent` rather
+than `Stage_Modified_Time`, and why the Zap fetches every deal at Formal Quote
+Sent and filters in code rather than narrowing the query.
 
 ## Data quality as it stands today
 
@@ -85,11 +85,11 @@ Of the **62 deals** currently at `Formal Quote Sent`:
   figure raised in the meeting
 - only **7** have a proposal date on or after 1 September 2026
 
-This is exactly why the journey clock is `Stage_Modified_Time` rather than
-`Date_Proposal_Sent`: if it keyed off that field, roughly one proposal in seven
-would silently never enter the journey — the precise failure the project exists
-to fix. `Date_Proposal_Sent` is still shown in the messages, falling back to the
-clock when blank.
+The 9 blanks are the weak point of counting from `Date_Proposal_Sent`. Rather
+than let roughly one proposal in seven silently never enter the journey — the
+precise failure the project exists to fix — the digest lists undated proposals
+in a short section of the same email and asks for the date. Visible, not
+dropped.
 
 One deal (`2026 Online Meeting`, Sarina Golf Club) has **no linked contact**, so
 the message copy has to degrade gracefully rather than print `undefined`.
@@ -105,11 +105,9 @@ Measured over 1 July to 8 September 2026 (50 business days, 69 proposals):
 | Matt's expected concurrent journeys | ~1.7 |
 | Busiest single day observed | 7 proposals (23 July) |
 
-So at steady state a consultant should expect **one or two reminder emails on a
-typical day**, not the flood the team was worried about. The 62 open deals do
-**not** generate reminders — but note that this is enforced by the `GO_LIVE_DATE`
-guard in the Code steps, not by anything in the data, since Zoho populates
-`Stage_Modified_Time` on every record.
+So a typical morning is **one email listing one proposal**. On the busiest day
+in those ten weeks it would have been one email listing three. The 62 open deals
+generate nothing, enforced by the `GO_LIVE_DATE` guard in the Code step.
 
 ## People
 
