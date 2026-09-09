@@ -34,10 +34,13 @@ string standalone.proposal_followup_digest()
     // Useful the first time and when something looks off. Noisy otherwise.
     DEBUG_DATES = true;
 
-    ESCALATION_CC = 'nathan.butcher@cprgroup.com.au';
-
-    // Must be a verified From address in CRM.
-    FROM_ADDRESS = 'joceli@cprgroup.com.au';
+    // NOTE ON EMAIL ADDRESSES
+    // Deluge validates the sendmail address fields when the script is saved,
+    // so they cannot be set from variables up here. They are literals in the
+    // sendmail block near the bottom of this function:
+    //   from - zoho.loginuserid, which is whoever owns the schedule
+    //   cc   - nathan.butcher@cprgroup.com.au, on day 4 escalations only
+    // Change them there, not here.
 
     // Skipped as non-working days along with weekends. Something the Zapier build
     // could not do. Keep this topped up each year.
@@ -311,11 +314,16 @@ string standalone.proposal_followup_digest()
             {
                 if(escalating)
                 {
+                    // The address fields are checked when the script is
+                    // saved, so they cannot be variables. zoho.loginuserid is
+                    // the schedule's owner and needs no separate verification.
+                    // TO CHANGE WHO IS COPIED ON ESCALATIONS, edit the literal
+                    // on the cc line here.
                     sendmail
                     [
-                        from: FROM_ADDRESS
+                        from: zoho.loginuserid
                         to: addr
-                        cc: ESCALATION_CC
+                        cc: "nathan.butcher@cprgroup.com.au"
                         subject: subject
                         message: body
                     ];
@@ -324,7 +332,7 @@ string standalone.proposal_followup_digest()
                 {
                     sendmail
                     [
-                        from: FROM_ADDRESS
+                        from: zoho.loginuserid
                         to: addr
                         subject: subject
                         message: body

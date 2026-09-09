@@ -46,6 +46,16 @@ runs inside the system that owns the data.
    - Paste [`proposal_followup_digest.dg`](proposal_followup_digest.dg), save.
 2. Set `GO_LIVE` near the top to the date you switch on, and leave
    `SEND_EMAILS = false` for now.
+
+   The email addresses are **not** configurable from the top of the file.
+   Deluge validates the `sendmail` address fields when the script is saved, so
+   they cannot come from variables — a variable produces *"Invalid email
+   address found"*. They are literals in the `sendmail` block near the bottom:
+
+   - `from: zoho.loginuserid` — whoever owns the schedule, and needs no
+     separate sender verification. A literal address works too, but only if it
+     is already a verified sender in CRM.
+   - `cc: "nathan.butcher@cprgroup.com.au"` — day 4 escalations only.
 3. **Run it once from the editor.** It sends nothing and logs exactly what it
    would have sent. Check:
    - the final line reads something like
