@@ -10,6 +10,7 @@ contacts the client.
 
 | File | What it is |
 |---|---|
+| [RUNBOOK.md](RUNBOOK.md) | **Start here.** Ordered switch-on steps, the tests to run first, and a troubleshooting table |
 | [BUILD-SPEC.md](BUILD-SPEC.md) | How to build the Zap. Section 1 explains why it is shaped this way; section 5 is the one thing not to get wrong |
 | [COPILOT-PROMPTS.md](COPILOT-PROMPTS.md) | A prompt that gets Zapier Copilot to scaffold it, and how to request the early access that would let Claude build it |
 | [crm-reference.md](crm-reference.md) | Verified field names, stage values, three API traps and the real proposal volumes |
