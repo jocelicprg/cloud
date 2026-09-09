@@ -12,64 +12,110 @@ timezone, and both fail silently rather than erroring.
 
 ---
 
-## Zap 1 — Day 1
-
-> Create a Zap that starts with a Catch Hook from Webhooks by Zapier. Then add a
-> Zoho CRM API Request action that makes a GET request. Then add a Filter step.
-> Then add a Code by Zapier step running JavaScript. Then add a second Filter
-> step. Then add a Gmail Send Email action. Do not add any other steps.
-
-Then correct by hand:
-
-- Step 2 URL: `https://www.zohoapis.com.au/crm/v7/Deals/{{deal_id}}`, no querystring
-- Step 3 filter: `Stage` exactly matches `Formal Quote Sent`
-- Step 4: paste [`zap-code/day1-start-journey.js`](zap-code/day1-start-journey.js), input `payload` = step 2 raw body
-- Step 5 filter: `send` exactly matches `yes`
-- Step 6: To/Subject/Body from step 4, Body type `Plain`
-
-The Zoho workflow rule that calls the hook is set up in Zoho, not Zapier. See
-build spec section 3a.
+Build them in this order. **Zap A alone delivers Days 2, 3 and 4** — every
+email including the escalation — and needs neither the Zoho webhook nor Zoho
+Cliq, so it is the one that gets value fastest.
 
 ---
 
-## Zap 2 — 08:00 morning reminders
+## Zap A — 08:00 reminders (Days 2, 3 and 4)
 
-> Create a Zap triggered by Schedule by Zapier every day at 8am, not on
-> weekends. Then add a Zoho CRM API Request action that makes a GET request.
-> Then add a Code by Zapier step running JavaScript. Then add a Filter step.
-> Then add a Looping by Zapier step that creates a loop from line items. Then
-> add a Gmail Send Email action inside the loop.
+```
+Create a Zap with these steps:
 
-Then correct by hand:
+1. Trigger: Schedule by Zapier - Every Day. Time of day 8:00 AM. Trigger on
+   weekends: No.
+2. Action: Zoho CRM - API Request. Method GET. URL:
+   https://www.zohoapis.com.au/crm/v7/Deals/search
+   Query string parameters, as two separate rows:
+     criteria = (Stage:equals:Formal Quote Sent)
+     per_page = 200
+   Do not add a "fields" query string parameter.
+3. Action: Code by Zapier - Run Javascript. Input Data: a single field named
+   payload, mapped to the raw response body from step 2.
+4. Filter by Zapier: only continue if due_count from step 3 is greater than 0.
+5. Looping by Zapier - Create Loop From Line Items. Map these line item fields
+   from step 3: to, cc, subject, body, deal_name, day_number.
+6. Action: Gmail - Send Email, inside the loop. To = to from the loop step.
+   Cc = cc from the loop step. Subject = subject from the loop step.
+   Body = body from the loop step. Body type = Plain.
 
-- Trigger: confirm the **account** timezone, not the Zap timezone, governs when
-  this fires. Build spec prerequisite 5.
-- Step 2 URL `https://www.zohoapis.com.au/crm/v7/Deals/search`, querystring
-  `criteria` = `(Stage:equals:Formal Quote Sent)` and `per_page` = `200`.
-  **Do not add a `fields` parameter** — it silently breaks the clock.
-- Step 3: paste [`zap-code/morning-0800.js`](zap-code/morning-0800.js), input
-  `payload` = step 2 raw body. Set `GO_LIVE_DATE` at the top of the code.
-- Step 4 filter: `due_count` greater than `0`
-- Step 5 loop: map `to`, `cc`, `subject`, `body`, `deal_name`, `day_number`
-- Step 6: map from the **loop** step, Body type `Plain`
+Name the Zap "CPRG proposal follow-up - 8am reminders".
+```
+
+Code step: [`zap-code/morning-0800.js`](zap-code/morning-0800.js)
+
+---
+
+## Zap B — Day 1 confirmation
+
+```
+Create a Zap with these steps:
+
+1. Trigger: Webhooks by Zapier - Catch Hook.
+2. Action: Zoho CRM - API Request. Method GET. URL:
+   https://www.zohoapis.com.au/crm/v7/Deals/{{deal_id}}
+   using the deal_id value from the catch hook. No query string parameters.
+3. Filter by Zapier: only continue if Stage from step 2 exactly matches
+   Formal Quote Sent
+4. Action: Code by Zapier - Run Javascript. Input Data: a single field named
+   payload, mapped to the raw response body from step 2.
+5. Filter by Zapier: only continue if send from step 4 exactly matches yes
+6. Action: Gmail - Send Email. To = to from step 4. Subject = subject from
+   step 4. Body = body from step 4. Body type = Plain.
+
+Name the Zap "CPRG proposal follow-up - Day 1".
+```
+
+Code step: [`zap-code/day1-start-journey.js`](zap-code/day1-start-journey.js)
+
+The Zoho workflow rule that calls the Catch Hook is configured in Zoho CRM, not
+Zapier. See build spec section 3a. Copy the Catch Hook URL into it.
 
 ---
 
-## Zap 3 — 15:00 afternoon nudges
+## Zap C — 15:00 nudges (Days 2 and 3)
 
-> Create a Zap triggered by Schedule by Zapier every day at 3pm, not on
-> weekends. Then add a Zoho CRM API Request action that makes a GET request.
-> Then add a Code by Zapier step running JavaScript. Then add a Filter step.
-> Then add a Looping by Zapier step that creates a loop from line items. Then
-> add a Zoho Cliq action that sends a direct message to a user, inside the loop.
+```
+Create a Zap with these steps:
 
-Then correct by hand, as for Zap 2, using
-[`zap-code/afternoon-1500.js`](zap-code/afternoon-1500.js) and mapping
-`consultant_email` and `message` from the loop.
+1. Trigger: Schedule by Zapier - Every Day. Time of day 3:00 PM. Trigger on
+   weekends: No.
+2. Action: Zoho CRM - API Request. Method GET. URL:
+   https://www.zohoapis.com.au/crm/v7/Deals/search
+   Query string parameters, as two separate rows:
+     criteria = (Stage:equals:Formal Quote Sent)
+     per_page = 200
+   Do not add a "fields" query string parameter.
+3. Action: Code by Zapier - Run Javascript. Input Data: a single field named
+   payload, mapped to the raw response body from step 2.
+4. Filter by Zapier: only continue if due_count from step 3 is greater than 0.
+5. Looping by Zapier - Create Loop From Line Items. Map these line item fields
+   from step 3: consultant_email, message, deal_name.
+6. Action: Zoho Cliq - Message to User, inside the loop.
+   To User = consultant_email from the loop step. Text = message from the
+   loop step.
 
-Zoho Cliq must be connected in Zapier first, or this step cannot be configured.
+Name the Zap "CPRG proposal follow-up - 3pm nudges".
+```
+
+Code step: [`zap-code/afternoon-1500.js`](zap-code/afternoon-1500.js)
+
+Zoho Cliq must be connected in Zapier before this step can be configured.
 
 ---
+
+## Four things Copilot cannot do for you
+
+1. **Paste the JavaScript.** Copilot creates the Code step and leaves it empty.
+2. **Set `GO_LIVE_DATE`** at the top of the code in Zaps A and C, to the
+   Brisbane date you switch on. This is the only thing keeping the 62 proposals
+   already at Formal Quote Sent from firing reminders. Get it wrong and the
+   whole team receives a flood on the first morning.
+3. **Check the schedule timezone.** Schedule triggers use the timezone on the
+   Zapier **account**, not on the Zap. See build spec prerequisite 5.
+4. **Pin the connections.** There are two Zoho CRM connections and five Gmail
+   connections with no default set.
 
 ## The other route: Next Gen Zap workflows
 
