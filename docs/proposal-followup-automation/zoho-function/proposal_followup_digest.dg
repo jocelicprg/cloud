@@ -1,4 +1,4 @@
-void standalone.proposal_followup_digest()
+string standalone.proposal_followup_digest()
 {
     /*
      * CPR Group - Proposal follow-up digest
@@ -327,9 +327,14 @@ void standalone.proposal_followup_digest()
         }
     }
 
-    info "Examined " + examined + " deals at Formal Quote Sent. Skipped " + skipped + ". Digests sent: " + sentCount + ".";
+    summary = "Examined " + examined + " deals at Formal Quote Sent. Skipped " + skipped + ". Digests sent: " + sentCount + ".";
     if(SEND_EMAILS == false)
     {
-        info "SEND_EMAILS is false, so nothing was emailed.";
+        summary = summary + " SEND_EMAILS is false, so nothing was emailed.";
     }
+    info summary;
+
+    // The standalone category must return a string. Returning the summary
+    // means the schedule's execution history shows what each run did.
+    return summary;
 }

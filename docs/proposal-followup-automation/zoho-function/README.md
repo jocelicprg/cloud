@@ -27,8 +27,13 @@ runs inside the system that owns the data.
      bare code with *"Improper code format"*. The file already carries one:
 
      ```
-     void standalone.proposal_followup_digest()
+     string standalone.proposal_followup_digest()
      ```
+
+     The return type must be `string`, not `void` — the standalone category
+     requires one, and the function ends with `return summary;` to satisfy it.
+     A useful side effect: that summary line is what the schedule's execution
+     history shows for each run.
 
      **The name in that line must match the function name Zoho assigned.**
      When you create the function, Zoho derives an API name from the display
