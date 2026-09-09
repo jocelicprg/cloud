@@ -84,6 +84,36 @@ silently skip roughly one proposal in seven, which is the exact failure this
 project exists to fix. It is still used for display in the messages, falling
 back to the clock when blank.
 
+## 1b. Could an AI build these Zaps instead?
+
+Partly, and not yet on this account. Checked 9 September 2026.
+
+Zapier has an early-access feature, **Next Gen Zap workflows**, where you
+describe a workflow in natural language and the assistant builds and deploys it
+to Zapier over MCP. If CPR Group opts into that early-access programme, most of
+section 3 to 5 below could be handed to an assistant rather than clicked
+together by hand.
+
+It is not available here today. The `Workflow Steps by Zapier` integration
+appears in the app catalogue but exposes zero actions, and enabling it returns
+"No actions found". The Zapier MCP server currently offers action execution,
+connection management and saved Skills, none of which can create a Zap.
+`Zapier Manager` manages Zaps that already exist — find, toggle on and off,
+approvals, team invites — but cannot create one.
+
+Two related things that do **not** help, so nobody spends time on them:
+
+- **Zapier Skills** are saved markdown instructions for an assistant. They can
+  only orchestrate tools the MCP server already exposes, so no skill can add a
+  Zap-creation capability. The catalogue ships four: onboard, demo, explore and
+  status.
+- There is no `build-workflows` skill, in the account catalogue or in Zapier's
+  own plugin repository.
+
+Until early access is granted, build sections 3 to 5 by hand. Everything there
+has been verified against the live account, so it is data entry rather than
+guesswork.
+
 ## 2. Prerequisites
 
 Work through these before building. Items 1 and 2 are blocking.
