@@ -1,26 +1,19 @@
 /*
  * CPR Group - Proposal follow-up digest
- * Zoho CRM scheduled function, Deluge
+ * Zoho CRM scheduled function (Deluge)
  *
- * WHERE THIS GOES
- *   Setup -> Developer Space -> Functions -> New Function (standalone)
- *   then Setup -> Developer Space -> Schedules -> New Schedule, pointing at it.
- *   Daily, 08:00, Australia/Brisbane. See README.md for the click path.
+ * Setup -> Developer Space -> Functions -> New Function (Standalone)
+ * then Setup -> Developer Space -> Schedules, daily at 08:00.
+ * Install and test steps are in README.md.
  *
- * WHAT IT DOES
- *   Each weekday morning, emails every consultant a digest of the proposals
- *   they need to chase, with the action for that business day. Reads only, and
- *   never contacts a client.
+ * Each weekday morning this emails every consultant a digest of the proposals
+ * they need to chase, with the action for that business day. It reads from CRM
+ * and writes nothing. It never contacts a client.
  *
- * WHY IT LIVES IN CRM RATHER THAN ZAPIER
- *   Everything it needs is already here: the data, the schedule, the owner
- *   email addresses, a working-days function that understands holidays, and
- *   sendmail. No connector to go stale, no per-task cost, and any CRM admin can
- *   see and edit it.
- *
- * BEFORE YOU SCHEDULE IT
- *   Set GO_LIVE below, and run it once with SEND_EMAILS set to false. That logs
- *   exactly what it would send without sending anything. See README.md.
+ * FIRST RUN: leave SEND_EMAILS false. The function then sends nothing and logs
+ * a diagnostic line per deal, which is how you confirm the two things that
+ * cannot be verified outside CRM - date parsing and the workDaysBetween
+ * boundary. See README.md section "Two things to check on the first run".
  */
 
 // ---------------------------------------------------------------------------
@@ -29,20 +22,24 @@
 
 // Proposals sent before this date never produce a reminder. This is the only
 // thing keeping the ~62 proposals already at Formal Quote Sent quiet.
-GO_LIVE = '2026-09-10';
+// Written the way Deluge reads dates most reliably: dd-MMM-yyyy.
+GO_LIVE = '10-Sep-2026'.toDate();
 
-// false = log only, send nothing. Use this for the first run.
-SEND_EMAILS = true;
+// false = send nothing, just log. Use this until the first run looks right.
+SEND_EMAILS = false;
 
-// Copied on a day 4 escalation.
+// Set true for one run to log the raw and parsed dates for every deal.
+// Useful the first time and when something looks off. Noisy otherwise.
+DEBUG_DATES = true;
+
 ESCALATION_CC = 'nathan.butcher@cprgroup.com.au';
 
-// The address the digests come from. Must be a verified From address in CRM.
+// Must be a verified From address in CRM.
 FROM_ADDRESS = 'joceli@cprgroup.com.au';
 
-// Queensland public holidays. workDaysBetween skips these as well as weekends,
-// which is something the Zapier build could not do. Keep it topped up.
-HOLIDAYS = {'01-Jan-2027','26-Jan-2027','26-Mar-2027','29-Mar-2027','25-Apr-2027','03-May-2027','25-Dec-2026','26-Dec-2026','28-Dec-2026'};
+// Skipped as non-working days along with weekends. Something the Zapier build
+// could not do. Keep this topped up each year.
+HOLIDAYS = {'25-Dec-2026','28-Dec-2026','01-Jan-2027','26-Jan-2027','26-Mar-2027','29-Mar-2027','25-Apr-2027','03-May-2027'};
 
 CRM_DEAL_URL = 'https://crm.zoho.com.au/crm/org691602767/tab/Potentials/';
 
@@ -50,153 +47,180 @@ CRM_DEAL_URL = 'https://crm.zoho.com.au/crm/org691602767/tab/Potentials/';
 // GATHER
 // ---------------------------------------------------------------------------
 
-today = zoho.currentdate.toDate();
+today = zoho.currentdate;
 
-// searchRecords returns up to 200 per page, which comfortably covers the ~62
-// deals at this stage. If that stage ever exceeds 200, add a second page.
+// Up to 200 per page, comfortably more than the ~62 at this stage.
 deals = zoho.crm.searchRecords("Deals", "(Stage:equals:Formal Quote Sent)", 1, 200);
 
-// email address -> map of { first_name, due (list), undated (list) }
 byConsultant = Map();
 examined = 0;
 skipped = 0;
 
 for each deal in deals
 {
-    examined = examined + 1;
-
-    ownerMap = deal.get("Owner");
-    ownerEmail = "";
-    ownerName = "";
-    if(ownerMap != null)
+    // A deal map always has an id. Anything without one is an error response
+    // rather than a record, so it is left alone.
+    if(deal.get("id") != null)
     {
-        ownerEmail = ifnull(ownerMap.get("email"), "");
-        ownerName = ifnull(ownerMap.get("name"), "");
-    }
+        examined = examined + 1;
 
-    org = "client not recorded";
-    if(deal.get("Account_Name") != null)
-    {
-        org = ifnull(deal.get("Account_Name").get("name"), org);
-    }
+        dealId = deal.get("id");
+        dealName = ifnull(deal.get("Deal_Name"), "Untitled deal");
 
-    contact = "";
-    if(deal.get("Contact_Name") != null)
-    {
-        contact = ifnull(deal.get("Contact_Name").get("name"), "");
-    }
-
-    dealName = ifnull(deal.get("Deal_Name"), "Untitled deal");
-    dealId = deal.get("id");
-    amountRaw = deal.get("Amount");
-    sentRaw = deal.get("Date_Proposal_Sent");
-
-    if(ownerEmail == "")
-    {
-        // Somebody owns deals and has no email on their CRM user record.
-        info "SKIP - no owner email for deal " + dealId + " (" + org + ")";
-        skipped = skipped + 1;
-        continue;
-    }
-
-    // Start this consultant's bucket the first time we see them.
-    if(!byConsultant.containKey(ownerEmail))
-    {
-        first = ownerName;
-        if(ownerName.contains(" "))
+        ownerEmail = "";
+        ownerName = "";
+        if(deal.get("Owner") != null)
         {
-            first = ownerName.getPrefix(" ");
+            ownerEmail = ifnull(deal.get("Owner").get("email"), "");
+            ownerName = ifnull(deal.get("Owner").get("name"), "");
         }
-        byConsultant.put(ownerEmail, {"first_name":first,"due":List(),"undated":List()});
-    }
-    bucket = byConsultant.get(ownerEmail);
 
-    // A proposal with no date cannot be counted. List it rather than drop it.
-    if(sentRaw == null || sentRaw == "")
-    {
-        undatedLine = "- " + org + ", " + dealName + "  " + CRM_DEAL_URL + dealId;
-        bucket.get("undated").add(undatedLine);
-        byConsultant.put(ownerEmail, bucket);
-        continue;
-    }
-
-    sentDate = sentRaw.toDate();
-
-    if(sentDate < GO_LIVE.toDate() || sentDate > today)
-    {
-        skipped = skipped + 1;
-        continue;
-    }
-
-    // Business days since the proposal went out, skipping weekends and the
-    // holiday list. Day 1 is the day it was sent.
-    day = sentDate.workDaysBetween(today, {"Saturday","Sunday"}, HOLIDAYS);
-
-    if(day < 2 || day > 4)
-    {
-        skipped = skipped + 1;
-        continue;
-    }
-
-    // Anything recorded on a later day than the proposal went out counts as a
-    // follow-up. Same-day activity is not counted, because moving the deal into
-    // the stage updates Last_Activity_Time by itself.
-    followedUp = false;
-    lastRaw = deal.get("Last_Activity_Time");
-    if(lastRaw != null && lastRaw != "")
-    {
-        if(lastRaw.toDate() > sentDate)
+        org = "client not recorded";
+        if(deal.get("Account_Name") != null)
         {
-            followedUp = true;
+            org = ifnull(deal.get("Account_Name").get("name"), org);
+        }
+
+        contact = "";
+        if(deal.get("Contact_Name") != null)
+        {
+            contact = ifnull(deal.get("Contact_Name").get("name"), "");
+        }
+
+        sentRaw = ifnull(deal.get("Date_Proposal_Sent"), "");
+        lastRaw = ifnull(deal.get("Last_Activity_Time"), "");
+
+        if(ownerEmail == "")
+        {
+            info "SKIP no owner email - " + org + " - " + CRM_DEAL_URL + dealId;
+            skipped = skipped + 1;
+        }
+        else
+        {
+            // Start this consultant's bucket the first time they appear.
+            if(byConsultant.containKey(ownerEmail) == false)
+            {
+                firstName = ownerName;
+                if(ownerName.contains(" "))
+                {
+                    firstName = ownerName.getPrefix(" ");
+                }
+                fresh = Map();
+                fresh.put("first_name", firstName);
+                fresh.put("due", List());
+                fresh.put("undated", List());
+                byConsultant.put(ownerEmail, fresh);
+            }
+            bucket = byConsultant.get(ownerEmail);
+
+            if(sentRaw == "")
+            {
+                // Cannot be counted. Listed in the digest, never dropped.
+                bucket.get("undated").add("- " + org + ", " + dealName + "  " + CRM_DEAL_URL + dealId);
+            }
+            else
+            {
+                // Zoho returns a date field as yyyy-MM-dd and a datetime as an
+                // ISO string. Taking the first 10 characters gives a plain date
+                // in both cases.
+                //
+                // IF THE FIRST RUN ERRORS HERE, try this instead:
+                //     sentDate = sentRaw.subString(0,10).toDate("yyyy-MM-dd");
+                sentDate = sentRaw.subString(0,10).toDate();
+
+                // Day 1 is the day the proposal was sent, so the next working
+                // day is Day 2.
+                //
+                // IF EVERY DEAL IS ONE DAY OUT, adjust the + 1 here.
+                day = sentDate.workDaysBetween(today, {"Saturday","Sunday"}, HOLIDAYS) + 1;
+
+                if(DEBUG_DATES)
+                {
+                    info "DATES " + org + " | raw=" + sentRaw + " | parsed=" + sentDate + " | today=" + today + " | day=" + day;
+                }
+
+                inWindow = true;
+                if(sentDate < GO_LIVE)
+                {
+                    inWindow = false;
+                }
+                if(sentDate > today)
+                {
+                    inWindow = false;
+                }
+                if(day < 2 || day > 4)
+                {
+                    inWindow = false;
+                }
+
+                if(inWindow == false)
+                {
+                    skipped = skipped + 1;
+                }
+                else
+                {
+                    // Activity on a later day than the proposal went out counts
+                    // as a follow-up. Same-day activity is not counted, because
+                    // moving the deal into the stage updates Last_Activity_Time
+                    // by itself.
+                    followedUp = false;
+                    if(lastRaw != "")
+                    {
+                        lastDate = lastRaw.subString(0,10).toDate();
+                        if(lastDate > sentDate)
+                        {
+                            followedUp = true;
+                        }
+                    }
+
+                    // Days 2 and 3 are the plan for the day and go out
+                    // regardless. Day 4 is the escalation, so it is suppressed
+                    // as soon as anything is recorded.
+                    if(day == 4 && followedUp)
+                    {
+                        skipped = skipped + 1;
+                    }
+                    else
+                    {
+                        action = "Nothing has been recorded since the proposal went out. Follow up today, or update the deal if you have already been in touch.";
+                        if(day == 2)
+                        {
+                            action = "Send them a short, personal text today to check it arrived.";
+                        }
+                        if(day == 3)
+                        {
+                            action = "Give them a call today. If you do not get through, leave a voicemail where that suits and send a short email straight afterwards.";
+                        }
+
+                        who = contact;
+                        if(contact == "")
+                        {
+                            who = "no contact linked to this deal";
+                        }
+
+                        amountText = "value not recorded";
+                        if(deal.get("Amount") != null)
+                        {
+                            if(deal.get("Amount") > 0)
+                            {
+                                amountText = "$" + deal.get("Amount");
+                            }
+                        }
+
+                        entry = Map();
+                        entry.put("day", day);
+                        entry.put("text", "- " + org + " (" + who + ")" + "\n" + "  " + dealName + ", " + amountText + ", sent " + sentDate.toString("d MMMM yyyy") + "\n" + "  Day " + day + ": " + action + "\n" + "  " + CRM_DEAL_URL + dealId);
+                        bucket.get("due").add(entry);
+                    }
+                }
+            }
+            byConsultant.put(ownerEmail, bucket);
         }
     }
-
-    // Days 2 and 3 are the plan for the day and go out regardless. Day 4 is the
-    // escalation, so it is suppressed as soon as anything is recorded.
-    if(day == 4 && followedUp)
-    {
-        skipped = skipped + 1;
-        continue;
-    }
-
-    action = "";
-    if(day == 2)
-    {
-        action = "Send them a short, personal text today to check it arrived.";
-    }
-    else if(day == 3)
-    {
-        action = "Give them a call today. If you do not get through, leave a voicemail where that suits and send a short email straight afterwards.";
-    }
-    else
-    {
-        action = "Nothing has been recorded since the proposal went out. Follow up today, or update the deal if you have already been in touch.";
-    }
-
-    who = contact;
-    if(contact == "")
-    {
-        who = "no contact linked to this deal";
-    }
-
-    amountText = "value not recorded";
-    if(amountRaw != null && amountRaw > 0)
-    {
-        amountText = "$" + amountRaw;
-    }
-
-    entry = Map();
-    entry.put("day", day);
-    entry.put("text", "- " + org + " (" + who + ")\n" +
-        "  " + dealName + ", " + amountText + ", sent " + sentDate.toString("d MMMM yyyy") + "\n" +
-        "  Day " + day + ": " + action + "\n" +
-        "  " + CRM_DEAL_URL + dealId);
-    bucket.get("due").add(entry);
-    byConsultant.put(ownerEmail, bucket);
 }
 
 // ---------------------------------------------------------------------------
-// SEND ONE DIGEST PER CONSULTANT
+// ONE DIGEST PER CONSULTANT
 // ---------------------------------------------------------------------------
 
 sentCount = 0;
@@ -207,109 +231,102 @@ for each addr in byConsultant.keys()
     dueList = bucket.get("due");
     undatedList = bucket.get("undated");
 
-    if(dueList.size() == 0 && undatedList.size() == 0)
+    if(dueList.size() > 0 || undatedList.size() > 0)
     {
-        continue;
-    }
+        escalating = false;
+        bodyLines = List();
+        bodyLines.add("Hi " + bucket.get("first_name") + ",");
 
-    escalating = false;
-    bodyLines = List();
-    bodyLines.add("Hi " + bucket.get("first_name") + ",");
-
-    if(dueList.size() > 0)
-    {
-        bodyLines.add("");
-        if(dueList.size() == 1)
-        {
-            bodyLines.add("One proposal needs a follow-up today.");
-        }
-        else
-        {
-            bodyLines.add(dueList.size() + " proposals need a follow-up today.");
-        }
-        for each item in dueList
+        if(dueList.size() > 0)
         {
             bodyLines.add("");
-            bodyLines.add(item.get("text"));
-            if(item.get("day") == 4)
+            if(dueList.size() == 1)
             {
-                escalating = true;
+                bodyLines.add("One proposal needs a follow-up today.");
+            }
+            else
+            {
+                bodyLines.add(dueList.size() + " proposals need a follow-up today.");
+            }
+            for each item in dueList
+            {
+                bodyLines.add("");
+                bodyLines.add(item.get("text"));
+                if(item.get("day") == 4)
+                {
+                    escalating = true;
+                }
+            }
+            bodyLines.add("");
+            bodyLines.add("Recording your follow-up against the deal is what stops these reminders.");
+            bodyLines.add("The check reads only what is in CRM, so a conversation you have not logged");
+            bodyLines.add("looks the same as no contact at all.");
+        }
+
+        if(undatedList.size() > 0)
+        {
+            bodyLines.add("");
+            bodyLines.add("These proposals have no proposal date, so they cannot be tracked. Please");
+            bodyLines.add("add the date and they will join the follow-up list:");
+            for each line in undatedList
+            {
+                bodyLines.add(line);
             }
         }
-        bodyLines.add("");
-        bodyLines.add("Recording your follow-up against the deal is what stops these reminders.");
-        bodyLines.add("The check reads only what is in CRM, so a conversation you have not logged");
-        bodyLines.add("looks the same as no contact at all.");
-    }
 
-    if(undatedList.size() > 0)
-    {
-        bodyLines.add("");
-        bodyLines.add("These proposals have no proposal date, so they cannot be tracked. Please add");
-        bodyLines.add("the date and they will join the follow-up list:");
-        for each line in undatedList
-        {
-            bodyLines.add(line);
-        }
-    }
-
-    if(escalating)
-    {
-        bodyLines.add("");
-        bodyLines.add("Nathan is copied, because a proposal has gone four business days with");
-        bodyLines.add("nothing recorded.");
-    }
-
-    subject = "Proposal follow-ups today";
-    if(dueList.size() == 0)
-    {
-        subject = "Proposals missing a proposal date";
-    }
-    else if(escalating)
-    {
-        subject = "Action required: proposal follow-up";
-    }
-
-    body = bodyLines.toString("\n");
-    ccAddr = "";
-    if(escalating)
-    {
-        ccAddr = ESCALATION_CC;
-    }
-
-    if(SEND_EMAILS)
-    {
         if(escalating)
         {
-            sendmail
-            [
-                from: FROM_ADDRESS
-                to: addr
-                cc: ccAddr
-                subject: subject
-                message: body
-            ];
+            bodyLines.add("");
+            bodyLines.add("Nathan is copied, because a proposal has gone four business days with");
+            bodyLines.add("nothing recorded.");
+        }
+
+        subject = "Proposal follow-ups today";
+        if(dueList.size() == 0)
+        {
+            subject = "Proposals missing a proposal date";
+        }
+        if(escalating)
+        {
+            subject = "Action required: proposal follow-up";
+        }
+
+        body = bodyLines.toString("\n");
+
+        if(SEND_EMAILS)
+        {
+            if(escalating)
+            {
+                sendmail
+                [
+                    from: FROM_ADDRESS
+                    to: addr
+                    cc: ESCALATION_CC
+                    subject: subject
+                    message: body
+                ];
+            }
+            else
+            {
+                sendmail
+                [
+                    from: FROM_ADDRESS
+                    to: addr
+                    subject: subject
+                    message: body
+                ];
+            }
+            sentCount = sentCount + 1;
         }
         else
         {
-            sendmail
-            [
-                from: FROM_ADDRESS
-                to: addr
-                subject: subject
-                message: body
-            ];
+            info "WOULD SEND to " + addr + " | subject: " + subject + "\n" + body;
         }
-        sentCount = sentCount + 1;
-    }
-    else
-    {
-        info "WOULD SEND to " + addr + " cc=" + ccAddr + "\nSubject: " + subject + "\n" + body;
     }
 }
 
-info "Examined " + examined + " deals at Formal Quote Sent, skipped " + skipped + ", digests sent: " + sentCount;
-if(!SEND_EMAILS)
+info "Examined " + examined + " deals at Formal Quote Sent. Skipped " + skipped + ". Digests sent: " + sentCount + ".";
+if(SEND_EMAILS == false)
 {
-    info "SEND_EMAILS is false, so nothing was actually emailed.";
+    info "SEND_EMAILS is false, so nothing was emailed.";
 }
