@@ -66,6 +66,14 @@ actually had, will always do more than a system message, and it removes the risk
 of a client receiving something that contradicts what you told them the day
 before.
 
+**The whole journey on one page**
+
+The full journey, showing what is live and what is still only proposed, is here:
+
+https://claude.ai/code/artifact/cb3b119c-9855-416f-9614-0cf2a0365b1f
+
+It is the quickest way to see where your prompts come from and what stops them.
+
 **The rest of the journey, for your feedback**
 
 The design continues past Day 4, and we have deliberately not switched that part
@@ -114,4 +122,7 @@ Thanks
   asks to see it.
 - If Zoho Cliq is not connected in time, delete the two 3:00pm rows from the
   table and the question about 3:00pm timing in the feedback paragraph, rather
-  than promising something that will not arrive.
+  than promising something that will not arrive. The journey page linked above
+  would need the same trim.
+- The journey page is private until you share it from the page's share menu.
+  Do that before sending, or the link will not open for anyone else.
