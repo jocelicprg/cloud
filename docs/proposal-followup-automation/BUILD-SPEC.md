@@ -62,11 +62,43 @@ quietly.
 | # | App / action | Configuration |
 |---|---|---|
 | 1 | **Schedule by Zapier** → Every Day | Time `8:00 AM`. **Trigger on weekends: No** |
-| 2 | **Zoho CRM** → Find Module Entries | Module `Deals`, Field name `Stage`, Value `Formal Quote Sent`. Leave *Field name 2* empty. Tested against the live CRM on 10 September 2026 |
-| 3 | **Code by Zapier** → Run JavaScript | Paste [`zap-code/daily-digest.js`](zap-code/daily-digest.js). Input Data: one field named `payload`, mapped to the raw output of step 2 |
-| 4 | **Filter by Zapier** | Continue only if `email_count` from step 3 is **greater than** `0` |
-| 5 | **Looping by Zapier** → Create Loop From Line Items | Map from step 3: `to`, `cc`, `subject`, `body` |
-| 6 | **Gmail** → Send Email | Inside the loop. **To** = `to`, **Cc** = `cc`, **Subject** = `subject`, **Body** = `body`, all from the **loop** step. **Body type** = `Plain` |
+| 2 | **Zoho CRM** → Find Module Entries | Module `Deals`, Field name `Stage`, Value `Formal Quote Sent`. Leave *Field name 2* empty |
+| 3 | **Looping by Zapier** → Create Loop From Line Items | Map the nine deal fields from step 2, listed below |
+| 4 | **Code by Zapier** → Run JavaScript | Inside the loop. Paste [`zap-code/per-deal-reminder.js`](zap-code/per-deal-reminder.js). Nine Input Data fields, mapped from the **loop** step |
+| 5 | **Filter by Zapier** | Inside the loop. Continue only if `send` from step 4 **exactly matches** `yes` |
+| 6 | **Gmail** → Send Email | Inside the loop. **To** = `to`, **Cc** = `cc`, **Subject** = `subject`, **Body** = `body`, all from step 4. **Body type** = `Plain` |
+
+### The loop comes before the code, and that is not arbitrary
+
+The obvious order is search, process everything, then loop to send. It does not
+work with a packaged Zoho action.
+
+`Find Module Entries` exposes its results as **line items**, and mapping line
+items into a Code step flattens them into comma-separated strings. There is no
+"raw response body" field to hand the step, the way an API Request action would
+provide. So a Code step placed before the loop cannot reliably see the records.
+
+Looping first means the Code step receives one deal at a time as plain scalar
+values. No arrays, no comma-joining, no ambiguity. The cost is one email per
+proposal rather than one digest per consultant, which at 1.4 proposals a
+business day is typically one email and occasionally three.
+
+### Loop and Code step field mappings
+
+Map these nine from step 2 into the loop, then map the loop's version of each
+into the Code step's Input Data under exactly these names:
+
+| Input Data name | Map from |
+|---|---|
+| `deal_id` | `results[]entries[]id` |
+| `deal_name` | `results[]entries[]Deal_Name` |
+| `owner_id` | `results[]entries[]Owner_id` |
+| `owner_name` | `results[]entries[]Owner_name` |
+| `account_name` | `results[]entries[]Account_Name_name` |
+| `contact_name` | `results[]entries[]Contact_Name_name` |
+| `amount` | `results[]entries[]Amount` |
+| `date_proposal_sent` | `results[]entries[]Date_Proposal_Sent` |
+| `last_activity_time` | `results[]entries[]Last_Activity_Time` |
 
 ### What this action actually returns
 
@@ -102,11 +134,12 @@ packaged action works fine on the same credentials.
 **Body type must be `Plain`.** The Code step builds the email with real line
 breaks. `Html` collapses every one of them into a single run-on paragraph.
 
-**Step 5 is not optional.** A Code step returning an array of objects is
-Zapier's documented fan-out and would let you drop it, but there are repeated
-reports of only the first item being processed. Here that would mean one
-consultant gets their email and the rest silently get nothing. The Code step
-emits parallel arrays, which Looping consumes reliably.
+**The Code step never addresses a client.** It resolves the recipient from the
+deal owner's Zoho user id through a fixed map, and the tests assert that every
+generated email goes to a `cprgroup.com.au` address and that no contact name or
+address appears in To or Cc. If you regenerate this code with an AI assistant,
+check that first: an earlier generated version addressed the email to the client
+contact, which is the one thing this design must never do.
 
 **Empty `cc` is fine.** It is only populated when a proposal has reached the
 Day 4 escalation, and Gmail accepts a blank Cc without complaint.
