@@ -154,7 +154,7 @@ void schedule.proposal_followup_digest_v2()
                     if(includeUndated)
                     {
                         undatedList = bucket.get("undated");
-                        undatedList.add("- " + org + ", " + dealName + "  " + CRM_DEAL_URL + dealId);
+                        undatedList.add("<li style='margin-bottom:4px;'><b>" + org + "</b> &nbsp;&middot;&nbsp; " + dealName + " &nbsp;&middot;&nbsp; <a href='" + CRM_DEAL_URL + dealId + "'>open in CRM</a></li>");
                         bucket.put("undated", undatedList);
                     }
                     else
@@ -248,18 +248,52 @@ void schedule.proposal_followup_digest_v2()
                                 who = "no contact linked to this deal";
                             }
 
+                            // Deluge has no dependable number formatter here, and a
+                            // runtime error in an unattended 8am run costs the whole
+                            // digest, so the separator is done with string surgery on
+                            // functions that cannot fail: subString and length.
                             amountText = "value not recorded";
                             if(deal.get("Amount") != null)
                             {
                                 if(deal.get("Amount") > 0)
                                 {
-                                    amountText = "$" + deal.get("Amount");
+                                    digits = deal.get("Amount").toString();
+                                    if(digits.contains("."))
+                                    {
+                                        digits = digits.getPrefix(".");
+                                    }
+                                    n = digits.length();
+                                    grouped = digits;
+                                    if(n > 6)
+                                    {
+                                        grouped = digits.subString(0, n - 6) + "," + digits.subString(n - 6, n - 3) + "," + digits.subString(n - 3, n);
+                                    }
+                                    else if(n > 3)
+                                    {
+                                        grouped = digits.subString(0, n - 3) + "," + digits.subString(n - 3, n);
+                                    }
+                                    amountText = "$" + grouped;
                                 }
                             }
 
+                            // Zoho CRM sends this as HTML, and Deluge does not turn
+                            // "\n" into a line break - the first live digest printed
+                            // the two characters instead. So every break is a tag.
+                            edge = "#d0d0d0";
+                            if(day == 4)
+                            {
+                                edge = "#c8102e";
+                            }
+                            block = "<div style='margin:0 0 18px;padding:2px 0 2px 12px;border-left:3px solid " + edge + ";'>";
+                            block = block + "<div style='font-weight:bold;font-size:15px;'>" + org + "</div>";
+                            block = block + "<div style='color:#666;font-size:13px;margin:2px 0 8px;'>" + dealName + " &nbsp;&middot;&nbsp; " + amountText + " &nbsp;&middot;&nbsp; sent " + sentDate.toString("d MMMM yyyy") + " &nbsp;&middot;&nbsp; " + who + "</div>";
+                            block = block + "<div><b>Day " + day + ":</b> " + action + "</div>";
+                            block = block + "<div style='margin-top:8px;font-size:13px;'><a href='" + CRM_DEAL_URL + dealId + "'>Open this deal in CRM</a></div>";
+                            block = block + "</div>";
+
                             entry = Map();
                             entry.put("day", day);
-                            entry.put("text", "- " + org + " (" + who + ")" + "\n" + "  " + dealName + ", " + amountText + ", sent " + sentDate.toString("d MMMM yyyy") + "\n" + "  Day " + day + ": " + action + "\n" + "  " + CRM_DEAL_URL + dealId);
+                            entry.put("text", block);
                             dueSoFar = bucket.get("due");
                             dueSoFar.add(entry);
                             bucket.put("due", dueSoFar);
@@ -286,52 +320,62 @@ void schedule.proposal_followup_digest_v2()
         if(dueList.size() > 0 || undatedList.size() > 0)
         {
             escalating = false;
-            bodyLines = List();
-            bodyLines.add("Hi " + bucket.get("first_name") + ",");
+
+            // Built as one HTML string rather than a list of lines. Deluge does
+            // not turn "\n" into a line break and Zoho sends this as HTML in any
+            // case, so the tags carry the layout. Styles are inline because Gmail
+            // discards a <style> block.
+            body = "<div style='font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#222222;max-width:640px;'>";
+            body = body + "<p style='margin:0 0 14px;'>Hi " + bucket.get("first_name") + ",</p>";
 
             if(dueList.size() > 0)
             {
-                bodyLines.add("");
                 if(dueList.size() == 1)
                 {
-                    bodyLines.add("One proposal needs a follow-up today.");
+                    body = body + "<p style='margin:0 0 16px;'>One proposal needs a follow-up today.</p>";
                 }
                 else
                 {
-                    bodyLines.add(dueList.size() + " proposals need a follow-up today.");
+                    body = body + "<p style='margin:0 0 16px;'>" + dueList.size() + " proposals need a follow-up today.</p>";
                 }
                 for each item in dueList
                 {
-                    bodyLines.add("");
-                    bodyLines.add(item.get("text"));
+                    body = body + item.get("text");
                     if(item.get("day") == 4)
                     {
                         escalating = true;
                     }
                 }
-                bodyLines.add("");
-                bodyLines.add("Recording your follow-up against the deal is what stops these reminders.");
-                bodyLines.add("The check reads only what is in CRM, so a conversation you have not logged");
-                bodyLines.add("looks the same as no contact at all.");
+
+                // This paragraph used to promise that logging a follow-up stopped
+                // the reminders. It does not. Days 2 and 3 go out either way,
+                // because CRM cannot tell whether a text message was sent. Only
+                // the Day 4 escalation is suppressed by recorded activity, and
+                // saying otherwise is a promise the automation cannot keep.
+                body = body + "<p style='margin:16px 0 0;padding-top:12px;border-top:1px solid #e5e5e5;color:#666666;font-size:13px;'>";
+                body = body + "Days 2 and 3 arrive whether or not you have already followed up, so ignore this if you have been in touch. ";
+                body = body + "Day 4 only arrives when nothing at all has been recorded against the deal, and Nathan is copied on it. ";
+                body = body + "The check reads only what is in CRM, so a conversation you have not logged looks the same as no contact at all.";
+                body = body + "</p>";
             }
 
             if(undatedList.size() > 0)
             {
-                bodyLines.add("");
-                bodyLines.add("These proposals have no proposal date, so they cannot be tracked. Please");
-                bodyLines.add("add the date and they will join the follow-up list:");
+                body = body + "<p style='margin:20px 0 8px;'><b>These proposals have no proposal date, so they cannot be tracked.</b> Please add the date and they will join the follow-up list.</p>";
+                body = body + "<ul style='margin:0 0 8px;padding-left:20px;'>";
                 for each line in undatedList
                 {
-                    bodyLines.add(line);
+                    body = body + line;
                 }
+                body = body + "</ul>";
             }
 
             if(escalating)
             {
-                bodyLines.add("");
-                bodyLines.add("Nathan is copied, because a proposal has gone four business days with");
-                bodyLines.add("nothing recorded.");
+                body = body + "<p style='margin:16px 0 0;color:#c8102e;'>Nathan is copied, because a proposal has gone four business days with nothing recorded.</p>";
             }
+
+            body = body + "</div>";
 
             subject = "Proposal follow-ups today";
             if(dueList.size() == 0)
@@ -342,8 +386,6 @@ void schedule.proposal_followup_digest_v2()
             {
                 subject = "Action required: proposal follow-up";
             }
-
-            body = bodyLines.toString("\n");
 
             if(SEND_EMAILS)
             {
@@ -377,7 +419,7 @@ void schedule.proposal_followup_digest_v2()
             }
             else
             {
-                info "WOULD SEND to " + addr + " | subject: " + subject + "\n" + body;
+                info "WOULD SEND to " + addr + " | subject: " + subject + " | " + body;
             }
         }
     }
