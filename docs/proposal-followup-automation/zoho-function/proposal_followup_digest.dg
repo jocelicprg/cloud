@@ -102,9 +102,19 @@ void schedule.proposal_followup_digest_v2()
             lastRaw = ifnull(deal.get("Last_Activity_Time"), "");
             createdRaw = ifnull(deal.get("Created_Time"), "");
 
+            // The owner field is the only thing deciding where a digest goes, and
+            // the digest carries client names and deal values. The CRM has users
+            // on outside domains (@remap.ai, @screen-magic.com), disabled today
+            // but reactivatable, so an address is checked before it is trusted
+            // rather than after.
             if(ownerEmail == "")
             {
                 info "SKIP no owner email - " + org + " - " + CRM_DEAL_URL + dealId;
+                skipped = skipped + 1;
+            }
+            else if(ownerEmail.endsWith("@cprgroup.com.au") == false)
+            {
+                info "SKIP owner outside cprgroup.com.au (" + ownerEmail + ") - " + org + " - " + CRM_DEAL_URL + dealId;
                 skipped = skipped + 1;
             }
             else
