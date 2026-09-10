@@ -1,12 +1,15 @@
-string standalone.proposal_followup_digest()
+void schedule.proposal_followup_digest_v2()
 {
     /*
      * CPR Group - Proposal follow-up digest
      * Zoho CRM scheduled function (Deluge)
      *
-     * Setup -> Developer Space -> Functions -> New Function (Standalone)
-     * then Setup -> Developer Space -> Schedules, daily at 08:00.
-     * Install and test steps are in README.md.
+     * Created from Setup -> Automation -> Schedules -> New Schedule -> Create a
+     * New Function, which puts it in the SCHEDULE category. That category returns
+     * void, so this function must not return a value. The same code pasted into
+     * Developer Space -> Functions needs the standalone signature instead:
+     *     string standalone.proposal_followup_digest()
+     * plus "return summary;" at the end. Install and test steps are in README.md.
      *
      * Each weekday morning this emails every consultant a digest of the proposals
      * they need to chase, with the action for that business day. It reads from CRM
@@ -384,9 +387,8 @@ string standalone.proposal_followup_digest()
     {
         summary = summary + " SEND_EMAILS is false, so nothing was emailed.";
     }
+    // The schedule category returns void, so this line is the whole record of
+    // the run. Read it at Setup -> Automation -> Schedules -> the schedule ->
+    // Execution History.
     info summary;
-
-    // The standalone category must return a string. Returning the summary
-    // means the schedule's execution history shows what each run did.
-    return summary;
 }

@@ -21,29 +21,37 @@ runs inside the system that owns the data.
 
 ## Install
 
-1. **Setup → Developer Space → Functions → New Function**
-   - Category: **Standalone**, Display name: `Proposal follow-up digest`
-   - Zoho requires a function signature as the very first line, and rejects
-     bare code with *"Improper code format"*. The file already carries one:
+1. **Setup → Automation → Schedules → + New Schedule → Create a New Function.**
 
-     ```
-     string standalone.proposal_followup_digest()
-     ```
+   Create it here, not under Developer Space → Functions. A standalone function
+   made there does not appear in the schedule's function picker, which cost us
+   an afternoon.
 
-     The return type must be `string`, not `void` — the standalone category
-     requires one, and the function ends with `return summary;` to satisfy it.
-     A useful side effect: that summary line is what the schedule's execution
-     history shows for each run.
+   - Function name: `proposal_followup_digest_v2`
+   - Paste the whole of
+     [`proposal_followup_digest.dg`](proposal_followup_digest.dg), signature
+     line and both braces included. This editor starts empty and wants the
+     complete function; pasting only the body gives *"Improper code format"*.
+   - **The name on line 1 must match the function name field exactly.** A
+     mismatch produces the same error.
 
-     **The name in that line must match the function name Zoho assigned.**
-     When you create the function, Zoho derives an API name from the display
-     name and pre-fills the signature in the editor. Either keep Zoho's
-     signature line and paste only the body between its braces, or paste the
-     whole file and edit `proposal_followup_digest` to match the name Zoho
-     shows. A mismatch produces the same error.
-   - Nothing may sit above the signature, not even a comment, which is why the
-     documentation block is inside the function.
-   - Paste [`proposal_followup_digest.dg`](proposal_followup_digest.dg), save.
+   Three things about the signature, each learned from a save-time rejection:
+
+   ```
+   void schedule.proposal_followup_digest_v2()
+   ```
+
+   - **Category `schedule`, not `standalone`.** This editor creates schedule
+     functions. Getting it wrong gives *"Invalid return Type string. Category
+     schedule returns void"*.
+   - **Return type `void`, and no `return` statement.** The run's record is the
+     `info summary` line in Execution History instead.
+   - **Nothing may sit above the signature**, not even a comment, which is why
+     the documentation block is inside the function.
+
+   To run the same code from Developer Space → Functions instead, the signature
+   becomes `string standalone.proposal_followup_digest()` and the function needs
+   `return summary;` at the end. That category rejects `void`.
 2. Set `GO_LIVE` near the top to the date you switch on, and leave
    `SEND_EMAILS = false` for now.
 
@@ -65,9 +73,8 @@ runs inside the system that owns the data.
    - the day numbers look right for the dates shown
 4. Set `SEND_EMAILS = true`, run once more, and confirm the real email arrives
    and reads properly.
-5. **Setup → Developer Space → Schedules → New Schedule**
-   - Function: the one above. Daily, 08:00. Confirm the org timezone is
-     Australia/Brisbane.
+5. **Finish the schedule** you started in step 1: Daily, 08:00, starting the
+   next working day. Confirm the org timezone is Australia/Brisbane.
    - Zoho allows 10 schedules per CRM, so there is room.
 
 Weekend suppression is handled inside the function by `workDaysBetween`, so a
