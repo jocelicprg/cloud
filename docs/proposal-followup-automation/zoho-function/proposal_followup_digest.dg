@@ -242,20 +242,51 @@ void schedule.proposal_followup_digest_v2()
                         }
                         else
                         {
-                            action = "Nothing has been recorded since the proposal went out. Follow up today, or update the deal if you have already been in touch.";
-                            if(day == 2)
-                            {
-                                action = "Send them a short, personal text today to check it arrived.";
-                            }
-                            if(day == 3)
-                            {
-                                action = "Give them a call today. If you do not get through, leave a voicemail where that suits and send a short email straight afterwards.";
-                            }
-
                             who = contact;
                             if(contact == "")
                             {
                                 who = "no contact linked to this deal";
+                            }
+
+                            // First names for the suggested message. The contact can
+                            // be blank or a single word, so fall back rather than
+                            // greeting somebody by an empty string.
+                            contactFirst = "there";
+                            if(contact != "")
+                            {
+                                contactFirst = contact;
+                                if(contact.contains(" "))
+                                {
+                                    contactFirst = contact.getPrefix(" ");
+                                }
+                            }
+                            senderFirst = ownerName;
+                            if(ownerName.contains(" "))
+                            {
+                                senderFirst = ownerName.getPrefix(" ");
+                            }
+
+                            // "Yesterday" is wrong after a weekend, since a Friday
+                            // proposal reaches Day 2 on the Monday. The day name is
+                            // right whichever way the days fall.
+                            sentDay = sentDate.toString("EEEE");
+
+                            // What happens next differs by day, so it belongs in the
+                            // deal block rather than in one footer for the whole
+                            // digest, which cannot be true of every deal at once.
+                            action = "Nothing has been recorded since the proposal went out. Follow up today, or update the deal if you have already been in touch.";
+                            nextStep = "";
+                            suggested = "";
+                            if(day == 2)
+                            {
+                                action = "Send them a short, personal text today to check it arrived.";
+                                suggested = "Hi " + contactFirst + ", just checking that the proposal I sent through on " + sentDay + " came through okay. If you have any questions or would like to talk anything through, just let me know.<br><br>" + senderFirst;
+                                nextStep = "Ignore this if you have already been in touch. The reminder to call follows on the next working day.";
+                            }
+                            if(day == 3)
+                            {
+                                action = "Give them a call today. If you do not get through, leave a voicemail where that suits and send a short email straight afterwards.";
+                                nextStep = "Ignore this if you have already been in touch. If nothing is recorded against the deal, a final reminder goes to you and Nathan on the next working day.";
                             }
 
                             // Deluge has no dependable number formatter here, and a
@@ -298,6 +329,15 @@ void schedule.proposal_followup_digest_v2()
                             block = block + "<div style='font-weight:bold;font-size:15px;'>" + org + "</div>";
                             block = block + "<div style='color:#666;font-size:13px;margin:2px 0 8px;'>" + dealName + " &nbsp;&middot;&nbsp; " + amountText + " &nbsp;&middot;&nbsp; sent " + sentDate.toString("d MMMM yyyy") + " &nbsp;&middot;&nbsp; " + who + "</div>";
                             block = block + "<div><b>Day " + day + ":</b> " + action + "</div>";
+                            if(suggested != "")
+                            {
+                                block = block + "<div style='margin:10px 0 0;padding:10px 12px;background:#f4f4f4;border-radius:4px;font-size:13px;color:#333333;'>" + suggested + "</div>";
+                                block = block + "<div style='margin-top:4px;font-size:12px;color:#888888;'>Suggested wording. Copy it, change it to suit, and send it yourself.</div>";
+                            }
+                            if(nextStep != "")
+                            {
+                                block = block + "<div style='margin-top:8px;font-size:13px;color:#666666;'>" + nextStep + "</div>";
+                            }
                             block = block + "<div style='margin-top:8px;font-size:13px;'><a href='" + CRM_DEAL_URL + dealId + "'>Open this deal in CRM</a></div>";
                             block = block + "</div>";
 
@@ -363,9 +403,8 @@ void schedule.proposal_followup_digest_v2()
                 // the Day 4 escalation is suppressed by recorded activity, and
                 // saying otherwise is a promise the automation cannot keep.
                 body = body + "<p style='margin:16px 0 0;padding-top:12px;border-top:1px solid #e5e5e5;color:#666666;font-size:13px;'>";
-                body = body + "Days 2 and 3 arrive whether or not you have already followed up, so ignore this if you have been in touch. ";
-                body = body + "Day 4 only arrives when nothing at all has been recorded against the deal, and Nathan is copied on it. ";
-                body = body + "The check reads only what is in CRM, so a conversation you have not logged looks the same as no contact at all.";
+                body = body + "Please record any calls, texts or emails against the deal, so the workflow can see you have been in touch. ";
+                body = body + "It reads only what is in CRM, so a conversation you have not logged looks the same as no contact at all.";
                 body = body + "</p>";
             }
 
