@@ -1,134 +1,116 @@
 # Switch-on runbook
 
-Follow these in order. Roughly 30 to 40 minutes. Steps 1 to 3 are account
-settings, 4 to 8 are the build and test, 9 and 10 go live.
+The build is the Zoho CRM scheduled function in
+[`zoho-function/`](zoho-function/). The Zapier work was abandoned; see
+[`zap-code/SUPERSEDED.md`](zap-code/SUPERSEDED.md).
 
 ---
 
-## 1. Reconnect Zoho CRM in Zapier
+## 1. Create the function
 
-Zapier → App Connections → Zoho CRM → reconnect.
+**Setup → Developer Space → Functions → New Function**, category **Standalone**.
+Paste [`zoho-function/proposal_followup_digest.dg`](zoho-function/proposal_followup_digest.dg).
 
-**Authorise against `zoho.com.au`, not `zoho.com`.** CPR Group is on the
-Australian data centre, and a US-domain authorisation is the likely reason both
-connections currently return `401`.
+Four save-time errors are already handled in the file, but if you retype any of
+it, these are the Deluge rules that caused them:
 
-There are two Zoho CRM connections, from 2023 and 2024. Reconnect one and use
-that same one throughout.
+| Error | Cause |
+|---|---|
+| Improper code format | Needs a signature on line 1, and nothing above it, not even a comment |
+| Invalid return type void | The standalone category must return `string` |
+| The syntax is incorrect | Deluge will not chain a method onto a `.get()` result |
+| Invalid email address found | `sendmail` address fields are validated at save time, so they cannot be variables |
 
-**Done when:** testing any Zoho step returns data. Do not trust the connection
-list — it currently reports both connections as healthy while they fail on
-execution.
+## 2. Set the go-live date
 
-## 2. Pin a Gmail connection
+```
+GO_LIVE = '10-Sep-2026'.toDate();
+```
 
-There are five Gmail connections and no default set, so a Gmail step has no
-mailbox to send from until one is chosen.
+Format is `dd-MMM-yyyy`. Proposals sent before this date never produce a
+reminder. It is the only thing keeping the ~60 proposals already at Formal
+Quote Sent quiet, and one of them dates to 2024.
 
-Prefer a shared mailbox such as `crm@cprgroup.com.au` over a personal one, so
-the reminders do not appear to come from someone who is on leave.
+Leave `SEND_EMAILS = false` and `DEBUG_DATES = true` for now.
 
-## 3. Check the schedule timezone
+## 3. Dry run
 
-Zapier account settings → Timezone.
+Execute from the editor. Nothing sends. Check three things:
 
-**Schedule triggers use the account timezone, not the Zap timezone.** Setting it
-on the Zap changes nothing.
+1. **Dates parse.** Lines read
+   `DATES <org> | raw=2026-09-08 | parsed=08-Sep-2026 | today=... | day=3`
+2. **Day numbers are right.** Count one yourself. A proposal sent Tuesday, read
+   Thursday, is Day 3. A Friday proposal read the following Monday is Day 2.
+3. **No `WOULD SEND` block names a 2024 or 2025 proposal.** If one does,
+   `GO_LIVE` is wrong. Stop here.
 
-- Already Australia/Brisbane → nothing to do.
-- Otherwise → either change it, which shifts every other scheduled Zap on the
-  account, or work out which hour equals 08:00 Brisbane and use that in step 4.
+The undated ones should log `UNDATED skipped as pre go-live` with their created
+dates.
 
-## 4. Build the Zap
+## 4. Prove the send path before relying on it
 
-New Zap, then paste the prompt in [COPILOT-PROMPTS.md](COPILOT-PROMPTS.md), or
-build the six steps by hand from [BUILD-SPEC.md](BUILD-SPEC.md) section 3.
+`sendmail` has not run at this point, and a scheduled run happens when nobody is
+watching. Prove it with a test that reaches nobody else:
 
-If Copilot built it, check its work. It is in beta, and the two things it is
-most likely to get wrong here are the step 2 field mapping and the step 5
-line-item mapping. Neither errors — they just quietly produce nothing.
+1. Temporarily set `GO_LIVE` back far enough to catch a few live proposals
+2. `SEND_EMAILS = true`
+3. In **both** `sendmail` blocks, temporarily replace `to: addr` with your own
+   address as a literal
 
-## 5. Paste the code and set the date
+Run once. Confirm the emails arrive, read properly, and the deal links open.
 
-Paste [`zap-code/daily-digest.js`](zap-code/daily-digest.js) into the Code step.
+**Then revert all three**, and check the `to:` lines especially — leaving them
+hardcoded sends every consultant's digest to one person.
 
-Set `GO_LIVE_DATE` at the top to the Brisbane date you are switching on.
+## 5. Go live
 
-Confirm the Gmail step has **Body type = `Plain`**. `Html` collapses every line
-break and the email arrives as one run-on paragraph.
+1. `SEND_EMAILS = true`
+2. `DEBUG_DATES = false`
+3. Save
+4. **Setup → Developer Space → Schedules → New Schedule** — the function,
+   Daily, 08:00. The org timezone is Australia/Brisbane.
 
-## 6. Test the search step
+A daily schedule is right even though this is weekday-only: `workDaysBetween`
+means nothing is ever due on a Saturday, so weekend runs send nothing.
 
-Test step 2. Expect **10 records** — that is Zapier's cap, not a fault, and the
-Code step handles it. They come back most-recently-modified first.
+## 6. Announce
 
-Each record should contain `Date_Proposal_Sent`, `Last_Activity_Time`,
-`Owner_id`, `Owner_name`, `Account_Name_name` and usually `Contact_Name_name`.
+Send [TEAM-EMAIL.md](TEAM-EMAIL.md), and only after step 5.
 
-There is deliberately **no owner email address** in this payload. The Code step
-maps `Owner_id` to an address itself. This was all verified against the live CRM
-on 10 September 2026, so it should match what you see.
-
-## 7. The backlog test
-
-Test the Code step against that real data.
-
-- `email_count` must be **0**, or a small number covering only proposals dated
-  on or after `GO_LIVE_DATE`
-- the log line should read like
-  `Examined 10 deals at Formal Quote Sent, skipped 7, emailing 2 consultant(s)`
-- a warning about hitting the 10-record maximum is expected and fine
-
-A consultant may legitimately get an email listing proposals with no proposal
-date. That is the undated section doing its job, not a fault.
-
-**If `email_count` is above 0, do not switch on.** Those 62 open proposals go
-back as far as 2024, and switching on would email the whole team about all of
-them on the first morning. Check `GO_LIVE_DATE` first.
-
-A small number of undated proposals may legitimately produce one email asking
-for the date to be filled in. That is expected behaviour, not a failure.
-
-## 8. See one real email
-
-Temporarily set `GO_LIVE_DATE` to about a week ago and re-test the Code step.
-One or two proposals should now appear. Test the Gmail step to send yourself a
-real email. Check it reads properly and the deal link opens.
-
-**Then set `GO_LIVE_DATE` back before publishing.** This is the easiest thing in
-the whole process to forget, and forgetting it causes exactly the flood step 7
-is guarding against.
-
-## 9. Publish
-
-Turn the Zap on. It fires on the next weekday at 08:00. Nothing reaches anyone
-until a proposal sent from now on reaches its second business day.
-
-## 10. Email the team
-
-Send [TEAM-EMAIL.md](TEAM-EMAIL.md), and only after step 9 — it tells people
-reminders start on their next proposal.
-
-Before sending, share the journey page from its share menu, or the link will not
-open for anyone else. Note that the page still shows the fuller six-step journey
-rather than the digest that is actually running, so either update it or say so.
+Digests come from whoever owns the schedule, because the sender is
+`zoho.loginuserid`. Say so in the email, and ask people to act on a digest
+rather than reply to it.
 
 ---
 
-## If something looks wrong later
+## Monitoring
 
-The Zap history log line is the first place to look. It reports how many deals
-were examined, how many were skipped and how many consultants were emailed.
+**Setup → Developer Space → Schedules → execution history.** Each run records
+the summary the function returns:
 
-Common causes, in the order worth checking:
+```
+Examined 60 deals at Formal Quote Sent. Skipped 58. Digests sent: 2.
+```
+
+That one line answers most questions without opening the logs.
 
 | Symptom | Likely cause |
 |---|---|
-| Nobody gets anything, ever | `GO_LIVE_DATE` is in the future, or the search returned nothing because the Zoho connection is stale again |
-| One consultant gets an email, others do not | The Looping step is misconfigured, or was removed |
-| The email is one run-on paragraph | Gmail Body type is set to `Html` instead of `Plain` |
-| A proposal never appears | Its `Date Proposal Sent` is blank. It should be listed in that consultant's digest under the undated section |
-| Reminders go to the wrong person | The deal owner is an administrator rather than the consultant |
-| One consultant never gets anything | Their Zoho user id is missing from `OWNER_EMAILS` in the code. The Zap history names them |
-| The truncation warning appears every day | The 10-record cap is biting. See build spec section 7 |
-| It fires at the wrong hour | The Zapier **account** timezone, not the Zap's |
+| Nobody gets anything, ever | `GO_LIVE` is in the future, or no proposal has reached day 2 yet |
+| A consultant never gets anything | No email address on their CRM user record. The log says `SKIP no owner email` |
+| A proposal never appears | Its Date Proposal Sent is blank and the deal predates go-live, so it is treated as backlog |
+| Digests stop after a schedule edit | Check the schedule is still active and the function still saves |
+| Someone is chased about a dead deal | The deal is still at Formal Quote Sent. Move it to Won, Closed Lost or Future Opportunity |
+
+## Known limitations
+
+1. A voicemail counts as activity. `Last_Activity_Time` cannot tell "spoke to
+   them" from "left a message" or "edited the record".
+2. Day 4 escalates even when the only follow-up happened on the day the
+   proposal went out, because that cannot be told apart from the stage change.
+3. Reminders follow the deal owner, so an administrator owning a deal gets them.
+4. A blank proposal date keeps a deal out of the count until someone fills it
+   in. Deals created since go-live are listed in the digest so it is visible.
+5. Public holidays are handled, but the list in `HOLIDAYS` needs topping up
+   each year.
+6. Nothing reaches a client. By design.
